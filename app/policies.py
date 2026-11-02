@@ -13,8 +13,9 @@ Because each limiter is a RateLimiter context wrapping a strategy, changing an
 algorithm is a config edit below, e.g. switching auth lockout to
 ("sliding_window", {"limit": 20, "window": 60}) needs no other code change.
 """
+import os
 from dataclasses import dataclass
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 
 from .ratelimit import RateLimiter, create_strategy
 
@@ -60,31 +61,42 @@ def plan_policies(plan: Plan) -> Dict[str, StrategyConfig]:
     }
 
 
-def _build(name: str, config: StrategyConfig) -> RateLimiter:
-    algorithm, params = config
-    return RateLimiter(name, create_strategy(algorithm, **params))
+# Set by the Upstash integration on Vercel. Without it, limiter state stays in process memory.
+REDIS_URL = os.environ.get("REDIS_URL") or os.environ.get("KV_URL")
+
+
+def _redis_client():
+    import redis
+
+    return redis.Redis.from_url(REDIS_URL, socket_timeout=3, socket_connect_timeout=3, health_check_interval=30)
 
 
 class Limiters:
     """All limiter instances for the process. Recreate to wipe state (tests)."""
 
-    def __init__(self) -> None:
+    def __init__(self, backend: Optional[str] = None, redis=None) -> None:
+        self.backend = backend or ("redis" if REDIS_URL else "memory")
+        self._redis = redis if redis is not None else (_redis_client() if self.backend == "redis" else None)
         per_plan = {name: plan_policies(plan) for name, plan in PLANS.items()}
         self.api_traffic: Dict[str, RateLimiter] = {
-            name: _build(f"api_traffic.{name}", cfg["api_traffic"]) for name, cfg in per_plan.items()
+            name: self._build(f"api_traffic.{name}", cfg["api_traffic"]) for name, cfg in per_plan.items()
         }
         self.daily_quota: Dict[str, RateLimiter] = {
-            name: _build(f"daily_quota.{name}", cfg["daily_quota"]) for name, cfg in per_plan.items()
+            name: self._build(f"daily_quota.{name}", cfg["daily_quota"]) for name, cfg in per_plan.items()
         }
-        self.transfer_velocity = _build("transfer_velocity", SHARED_POLICIES["transfer_velocity"])
-        self.payout_rail = _build("payout_rail", SHARED_POLICIES["payout_rail"])
-        self.auth_failures = _build("auth_failures", SHARED_POLICIES["auth_failures"])
-        self.signups = _build("signups", SHARED_POLICIES["signups"])
+        self.transfer_velocity = self._build("transfer_velocity", SHARED_POLICIES["transfer_velocity"])
+        self.payout_rail = self._build("payout_rail", SHARED_POLICIES["payout_rail"])
+        self.auth_failures = self._build("auth_failures", SHARED_POLICIES["auth_failures"])
+        self.signups = self._build("signups", SHARED_POLICIES["signups"])
+
+    def _build(self, name: str, config: StrategyConfig) -> RateLimiter:
+        algorithm, params = config
+        return RateLimiter(name, create_strategy(algorithm, backend=self.backend, redis=self._redis, **params))
 
 
 limiters = Limiters()
 
 
-def reset_limiters() -> None:
+def reset_limiters(backend: Optional[str] = None, redis=None) -> None:
     global limiters
-    limiters = Limiters()
+    limiters = Limiters(backend, redis)

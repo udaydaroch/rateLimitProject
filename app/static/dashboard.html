@@ -181,7 +181,7 @@ async function load() {
   const { res, data } = await api("/v1/usage");
   if (!res.ok) {
     $("connectError").textContent = res.status === 401
-      ? "This key isn't recognised. The live sandbox resets when its server instance recycles, so sign up again below."
+      ? "This key isn't recognised, or it was revoked. Sign up below for a new one."
       : `Error ${res.status}: ${JSON.stringify(data?.detail ?? data)}`;
     $("app").classList.add("hidden");
     return;
@@ -337,8 +337,16 @@ $("signup").onclick = async () => {
   const data = await res.json();
   const box = $("signupResult");
   box.classList.remove("hidden");
-  if (!res.ok) { box.innerHTML = `<span class="error">${esc(JSON.stringify(data.detail))}</span>`; return; }
+  if (!res.ok) {
+    const d = data.detail || {};
+    const msg = d.error === "email_taken" ? "That email already has an account. Use a different email."
+      : res.status === 429 ? `Too many signups from your network. Try again in ${Math.ceil((d.retry_after_seconds || 60) / 60)} min.`
+      : JSON.stringify(d);
+    box.innerHTML = `<span class="error">${esc(msg)}</span>`;
+    return;
+  }
   box.innerHTML = `Your API key (shown once): <code>${esc(data.api_key)}</code>`;
+  $("suEmail").value = randomEmail();  // a second click shouldn't reuse the same email
   $("apiKey").value = data.api_key;
   load();
 };
@@ -352,7 +360,8 @@ $("createKey").onclick = async () => {
   loadKeys();
 };
 
-$("suEmail").value = `dev+${Math.random().toString(36).slice(2, 7)}@example.com`;
+function randomEmail() { return `dev+${Math.random().toString(36).slice(2, 7)}@example.com`; }
+$("suEmail").value = randomEmail();
 $("apiKey").value = store.get();
 if ($("apiKey").value) load();
 </script>

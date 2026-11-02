@@ -1,18 +1,44 @@
+import os
 import uuid
 
+import fakeredis
 import pytest
 from fastapi.testclient import TestClient
 
+from app import db as app_db
 
-@pytest.fixture
-def client(tmp_path, monkeypatch):
-    monkeypatch.setattr("app.db.DB_PATH", str(tmp_path / "test.db"))
+# Optional: run the suite against real Postgres, each test in a throwaway schema.
+# Use a direct (unpooled) URL, e.g. TEST_DATABASE_URL=$DATABASE_URL_UNPOOLED pytest
+TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
+
+
+@pytest.fixture(params=["memory", "redis"])
+def client(request, tmp_path):
+    """The whole API suite runs twice: in-memory limiters, then Redis limiters."""
     from app import policies
     from app.main import app
 
-    policies.reset_limiters()
-    with TestClient(app) as c:
-        yield c
+    schema = None
+    if TEST_DATABASE_URL:
+        import psycopg
+
+        schema = f"test_{uuid.uuid4().hex[:12]}"
+        with psycopg.connect(TEST_DATABASE_URL, autocommit=True) as conn:
+            conn.execute(f"CREATE SCHEMA {schema}")
+        sep = "&" if "?" in TEST_DATABASE_URL else "?"
+        app_db.configure(database_url=f"{TEST_DATABASE_URL}{sep}options=-csearch_path%3D{schema}")
+    else:
+        app_db.configure(path=str(tmp_path / "test.db"))
+
+    policies.reset_limiters(request.param, fakeredis.FakeRedis() if request.param == "redis" else None)
+    try:
+        with TestClient(app) as c:
+            yield c
+    finally:
+        app_db.configure()
+        if schema:
+            with psycopg.connect(TEST_DATABASE_URL, autocommit=True) as conn:
+                conn.execute(f"DROP SCHEMA {schema} CASCADE")
 
 
 def signup(client, plan="free"):
@@ -30,13 +56,12 @@ def transfer(client, headers, src, dst, amount=100, key=None):
 
 
 def test_api_key_is_only_stored_hashed(client):
-    from app.db import connect
-
     r = client.post("/v1/signup", json={"name": "A", "email": "a@ex.com"})
     key = r.json()["api_key"]
     secret = key.split("_")[3]
-    rows = connect().execute("SELECT * FROM api_keys").fetchall()
-    assert all(secret not in str(tuple(row)) for row in rows)
+    with app_db.connection() as db:
+        rows = db.execute("SELECT * FROM api_keys").fetchall()
+    assert rows and all(secret not in str(dict(row)) for row in rows)
 
 
 def test_invalid_and_revoked_keys_are_rejected(client):
@@ -192,6 +217,7 @@ def test_free_plan_daily_quota_is_enforced(client):
 
     headers, _ = signup(client)
     # Strategy pattern in action: shrink the quota by swapping the strategy.
+    # (The swapped-in strategy is in-memory even on the Redis run; the app can't tell.)
     policies.limiters.daily_quota["free"].set_strategy(FixedWindow(limit=2, window=86_400))
     policies.limiters.api_traffic["free"].reset("key:1")
     assert client.get("/v1/accounts", headers=headers).status_code == 200
@@ -242,3 +268,10 @@ def test_client_ip_uses_forwarded_header_only_behind_trusted_proxy(monkeypatch):
     assert deps.client_ip(req) == "10.0.0.1"  # don't let clients spoof their IP
     monkeypatch.setattr(deps, "TRUST_PROXY", True)
     assert deps.client_ip(req) == "203.0.113.9"
+
+
+def test_duplicate_email_does_not_use_a_signup_slot(client):
+    client.post("/v1/signup", json={"name": "A", "email": "dup@ex.com"})
+    for _ in range(15):
+        assert client.post("/v1/signup", json={"name": "A", "email": "dup@ex.com"}).status_code == 409
+    assert client.post("/v1/signup", json={"name": "B", "email": "fresh@ex.com"}).status_code == 201

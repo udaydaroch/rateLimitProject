@@ -5,10 +5,11 @@ system. Developers sign up, get an API key, and call endpoints for accounts,
 transfers and payouts. Behind those endpoints, **four rate limiting algorithms**
 each guard the part of the bank they're best suited to.
 
-**Live demo:** `https://YOUR-PROJECT.vercel.app` · [Dashboard](https://YOUR-PROJECT.vercel.app/dashboard) · [Interactive API docs](https://YOUR-PROJECT.vercel.app/docs)
+**Live demo:** https://rate-limit-project.vercel.app · [Dashboard](https://rate-limit-project.vercel.app/dashboard) · [Interactive API docs](https://rate-limit-project.vercel.app/docs)
 
-> The live demo is a sandbox. Its data lives on a serverless instance and resets
-> when that instance recycles. If your key stops working, sign up again.
+Runs on Vercel serverless functions, with **Postgres** (Neon) for customers, keys
+and the ledger, and **Redis** (Upstash) for rate limiter state. All the money is
+sandbox money.
 
 ---
 
@@ -26,14 +27,14 @@ each guard the part of the bank they're best suited to.
 5. [Endpoint reference: what happens inside each one](#endpoint-reference)
 6. [Other backend design points](#other-backend-design-points)
 7. [Run it locally](#run-it-locally)
-8. [Deploying (GitHub + Vercel)](#deploying-github--vercel)
+8. [Architecture and deployment](#architecture-and-deployment)
 9. [Project layout](#project-layout)
 
 ---
 
 ## Try it in one minute
 
-The easiest way is the **[dashboard](https://YOUR-PROJECT.vercel.app/dashboard)**:
+The easiest way is the **[dashboard](https://rate-limit-project.vercel.app/dashboard)**:
 sign up, then press the buttons in the **Rate limit lab**. Each button runs one
 algorithm and colours every request green (accepted), amber (queued or
 replayed) or red (rate limited).
@@ -41,7 +42,7 @@ replayed) or red (rate limited).
 From a terminal:
 
 ```bash
-BASE=https://YOUR-PROJECT.vercel.app    # or http://127.0.0.1:8000 locally
+BASE=https://rate-limit-project.vercel.app    # or http://127.0.0.1:8000 locally
 
 # 1. Sign up. The key is shown once; only a hash is stored.
 KEY=$(curl -s -X POST $BASE/v1/signup -H 'Content-Type: application/json' \
@@ -54,7 +55,7 @@ for i in $(seq 12); do curl -s -o /dev/null -w "%{http_code} " -H "X-API-Key: $K
 curl -s -H "X-API-Key: $KEY" $BASE/v1/limits
 ```
 
-In [Swagger](https://YOUR-PROJECT.vercel.app/docs), click **Authorize**, paste
+In [Swagger](https://rate-limit-project.vercel.app/docs), click **Authorize**, paste
 the key, and every endpoint becomes clickable.
 
 ---
@@ -366,6 +367,44 @@ SHARED_POLICIES = {
 Moving auth lockout to a sliding window is a one-line config change, and no
 endpoint code changes.
 
+**Where the state lives is a strategy choice too.** Every algorithm has two
+implementations behind the same interface:
+
+| | In-memory (`TokenBucket`, …) | Redis (`RedisTokenBucket`, …) |
+|---|---|---|
+| State | Python dicts in the process | Redis hashes, sorted sets and counters with TTLs |
+| Atomicity | a `threading.Lock` | one **Lua script** per decision; Redis runs it as a single step |
+| Use | local dev, tests | production: many serverless instances share one limiter |
+
+```python
+create_strategy("token_bucket", capacity=10, refill_rate=2)                                # memory
+create_strategy("token_bucket", backend="redis", redis=client, capacity=10, refill_rate=2)  # Redis
+```
+
+The Lua script is what makes the Redis version correct. Without it, two
+instances could both read "1 token left" and both spend it. Inside a script,
+the read, the decision and the write can't be interleaved with anything else.
+This is the token bucket's script ([`redis_strategies.py`](app/ratelimit/redis_strategies.py)):
+
+```lua
+local state  = redis.call('HMGET', KEYS[1], 'tokens', 'ts')
+local tokens = tonumber(state[1]) or capacity
+local last   = tonumber(state[2]) or now
+tokens = math.min(capacity, tokens + math.max(0, now - last) * rate)   -- refill
+local allowed = tokens >= cost
+if allowed then tokens = tokens - cost end                              -- spend
+redis.call('HSET', KEYS[1], 'tokens', tostring(tokens), 'ts', tostring(now))
+redis.call('PEXPIRE', KEYS[1], math.ceil(capacity / rate * 1000) + 1000)  -- idle keys clean themselves up
+```
+
+The sliding window uses a sorted set of timestamps (`ZREMRANGEBYSCORE` drops
+expired entries, `ZCARD` counts what's left). The fixed window uses one
+`INCRBY` counter per window, which expires at the window's end. The leaky bucket
+stores `(level, ts)` the way the token bucket stores `(tokens, ts)`.
+
+The algorithm tests run against **both** backends, and the whole API suite runs
+once with each, so the two implementations can't drift apart.
+
 ---
 
 ## Endpoint reference
@@ -596,8 +635,9 @@ very next request.
   middleware sees the final status code of every request, including 429s raised
   inside dependencies. It adds the `RateLimit-*` headers and writes one usage
   event per call.
-- **Money safety.** Integer cents, a `CHECK (balance_cents >= 0)` constraint, and
-  `BEGIN IMMEDIATE` transactions.
+- **Money safety.** Integer cents, a `CHECK (balance_cents >= 0)` constraint, an
+  atomic conditional debit, and each transfer plus its idempotency record in
+  one transaction.
 - **Client IP behind a proxy.** On Vercel, every request reaches the app from
   Vercel's proxy, so per-IP limits read the real client from `X-Forwarded-For`.
   That header is trusted **only** when running behind the proxy; otherwise anyone
@@ -617,43 +657,61 @@ python3 -m venv .venv
 
 - Dashboard: http://127.0.0.1:8000/dashboard
 - API docs: http://127.0.0.1:8000/docs
-- Tests (34 tests, every algorithm driven by a fake clock): `.venv/bin/pytest -q`
+- Tests (65 tests; every algorithm is driven by a fake clock and runs on both backends): `.venv/bin/pytest -q`
+
+Locally, the app uses a SQLite file and in-memory limiters with zero setup.
+Set `DATABASE_URL` and/or `REDIS_URL` to use Postgres and Redis instead. To run
+the API tests against a real Postgres, each test in its own throwaway schema:
+`TEST_DATABASE_URL=postgresql://… .venv/bin/pytest tests/test_api.py`
 
 ---
 
-## Deploying (GitHub + Vercel)
+## Architecture and deployment
 
-1. **GitHub.** Create an empty repository (no README) at
-   https://github.com/new, then:
-   ```bash
-   git remote add origin https://github.com/<you>/<repo>.git
-   git push -u origin main
-   ```
-2. **Vercel.** At https://vercel.com/new, import the repository. No build
-   settings are needed: [`vercel.json`](vercel.json) sends every path to the
-   FastAPI app in [`api/index.py`](api/index.py), and Vercel installs
-   `requirements.txt`.
-3. Under **Environment Variables**, set `API_KEY_PEPPER` to a random value:
-   `python3 -c "import secrets; print(secrets.token_urlsafe(32))"`
-4. Deploy, then replace `YOUR-PROJECT.vercel.app` at the top of this README with
-   your URL. Every later `git push` redeploys automatically.
+```mermaid
+flowchart LR
+    C[Client / dashboard] --> V["Vercel serverless functions<br/>(FastAPI, many instances)"]
+    V -- "rate limit decisions<br/>(atomic Lua scripts)" --> R[("Upstash Redis")]
+    V -- "customers, keys, ledger,<br/>idempotency, usage" --> P[("Neon Postgres")]
+```
 
-### What "demo mode" means on Vercel
+Vercel runs the app as serverless functions: many short-lived instances, none
+with a lasting disk. Anything that has to be shared between them lives outside
+the function:
 
-Vercel runs the app as serverless functions, so two things are deliberately
-simplified:
-
-| | In this demo | Production version |
+| State | Where | Why |
 |---|---|---|
-| Customers, keys, ledger | SQLite in `/tmp`, wiped when the instance recycles | Postgres |
-| Limiter state | In the instance's memory | Redis, with one Lua script per algorithm for atomic check-and-update |
+| Customers, API keys, accounts, ledger, idempotency keys, usage events | **Postgres** (Neon) | durable and transactional. A key created by one instance works on every other. |
+| Rate limiter state | **Redis** (Upstash) | every request reads and writes it, so it has to be fast and atomic. TTLs clean up idle keys. |
 
-At demo traffic, Vercel serves requests from one warm instance, so limits behave
-exactly as described. Under heavy load it could start a second instance with its
-own memory: limits would then be per instance, and a key created on one instance
-wouldn't exist on the other. Moving to Redis only changes the storage *inside*
-each strategy. The `RateLimitStrategy` interface, the policies, and every
-endpoint stay the same, which is the point of the Strategy pattern.
+A first version kept both in each instance's memory and `/tmp`. In a live test,
+one client's 10th request landed on a second instance where its API key didn't
+exist (`401`), even at a single user's traffic. That's why the shared stores
+are there.
+
+Details that matter on serverless:
+- **Connection pooling.** Each instance keeps a small `psycopg_pool` connected to
+  Neon's PgBouncer endpoint, with prepared statements turned off as PgBouncer
+  requires.
+- **Schema setup** runs lazily on first use, behind a Postgres advisory lock so
+  two cold-starting instances don't race on `CREATE TABLE`.
+- **Money safety without row locks.** A debit is a single
+  `UPDATE … SET balance = balance - x WHERE id = ? AND balance >= x`. Postgres
+  serialises concurrent updates to the same row, so two simultaneous transfers
+  can't both pass the balance check.
+- **Clocks.** Limiter scripts take the app's `now` (instances are NTP-synced)
+  and guard against small clock skew with `max(0, now - last)`.
+
+### Deploying your own copy
+
+1. Import the repository at https://vercel.com/new. No build settings are needed:
+   Vercel detects FastAPI and serves [`api/index.py`](api/index.py).
+2. Add the **Neon** and **Upstash for Redis** integrations from the Vercel
+   Marketplace (both have free plans) and connect them to the project. They set
+   `DATABASE_URL` and `REDIS_URL` for you.
+3. Add an environment variable `API_KEY_PEPPER` with a random value:
+   `python3 -c "import secrets; print(secrets.token_urlsafe(32))"`
+4. Deploy. Every later `git push` redeploys automatically.
 
 ---
 
@@ -669,12 +727,13 @@ app/
   metering.py          usage report + billing estimate
   pagination.py        opaque cursors
   security.py          API key generation + HMAC hashing
-  db.py                SQLite schema
+  db.py                Postgres / SQLite access + schema
   ratelimit/
     base.py            RateLimitStrategy interface + Decision
     token_bucket.py    sliding_window.py    fixed_window.py    leaky_bucket.py
+    redis_strategies.py  the same four algorithms as atomic Redis Lua scripts
     limiter.py         RateLimiter (Strategy context)
-    factory.py         create_strategy()
+    factory.py         create_strategy(algorithm, backend=...)
   static/dashboard.html
 api/index.py           Vercel entrypoint
 tests/                 strategy unit tests + API tests

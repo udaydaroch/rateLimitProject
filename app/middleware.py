@@ -3,25 +3,25 @@
 Runs around every request, so it sees the final status code, including 429s
 raised from dependencies, and records one usage event per authenticated call.
 """
+import datetime as dt
 import math
 import time
 
 import anyio
 from starlette.datastructures import MutableHeaders
 
-from .db import connect
+from .db import connection
 
 
 def _record_usage(api_key_id: int, customer_id: int, endpoint: str, status: int) -> None:
-    conn = connect()
-    try:
-        conn.execute(
-            "INSERT INTO usage_events (api_key_id, customer_id, endpoint, status_code, billable, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (api_key_id, customer_id, endpoint, status, int(status < 400), time.time()),
+    now = time.time()
+    day = dt.datetime.fromtimestamp(now, dt.timezone.utc).date().isoformat()
+    with connection() as db:
+        db.execute(
+            "INSERT INTO usage_events (api_key_id, customer_id, endpoint, status_code, billable, day, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (api_key_id, customer_id, endpoint, status, int(status < 400), day, now),
         )
-    finally:
-        conn.close()
 
 
 class RateLimitHeadersAndMetering:

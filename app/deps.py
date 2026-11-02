@@ -4,7 +4,6 @@ Every decision made for a request is stored on `request.state.rl_decisions`;
 the middleware turns those into RateLimit-* response headers.
 """
 import os
-import sqlite3
 import time
 from dataclasses import dataclass
 from typing import Optional
@@ -13,7 +12,7 @@ from fastapi import Depends, HTTPException, Request, Security
 from fastapi.security import APIKeyHeader
 
 from . import policies
-from .db import get_db
+from .db import Database, get_db
 from .policies import PLANS, Plan
 from .ratelimit import Decision, RateLimiter
 from .security import parse_api_key, verify_secret
@@ -67,7 +66,7 @@ def client_ip(request: Request) -> str:
 def authenticate(
     request: Request,
     x_api_key: Optional[str] = Security(api_key_header),
-    db: sqlite3.Connection = Depends(get_db),
+    db: Database = Depends(get_db),
 ) -> Client:
     ip = client_ip(request)
     lockout = policies.limiters.auth_failures

@@ -4,7 +4,6 @@ Run:  .venv/bin/uvicorn app.main:app --reload
 Docs: http://127.0.0.1:8000/docs     Dashboard: http://127.0.0.1:8000/dashboard
 """
 import random
-import sqlite3
 import time
 from pathlib import Path
 from typing import List, Literal, Optional
@@ -14,7 +13,7 @@ from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
 from . import policies
-from .db import get_db
+from .db import Database, IntegrityError, get_db
 from .deps import Client, client_ip, enforce, management_client, metered_client
 from .idempotency import run_idempotent
 from .metering import usage_report
@@ -34,7 +33,8 @@ A sandbox banking API that demonstrates four rate limiting algorithms.
 3. Call endpoints and watch the `RateLimit-*` response headers.
    `GET /v1/limits` shows the live internal state of every limiter for your key.
 
-This is a demo sandbox, and data resets when the server instance recycles.
+Everything here is sandbox money. Data lives in Postgres and limiter state in
+Redis, so limits hold across every serverless instance.
 The visual dashboard is at [/dashboard](/dashboard).
 """
 
@@ -79,7 +79,7 @@ class PayoutBatchIn(BaseModel):
 
 # ---------- helpers ----------
 
-def _own_account(db: sqlite3.Connection, client: Client, account_id: int) -> sqlite3.Row:
+def _own_account(db: Database, client: Client, account_id: int) -> dict:
     row = db.execute("SELECT * FROM accounts WHERE id = ? AND customer_id = ?",
                      (account_id, client.customer_id)).fetchone()
     if row is None:
@@ -87,84 +87,93 @@ def _own_account(db: sqlite3.Connection, client: Client, account_id: int) -> sql
     return row
 
 
-def _account_json(row: sqlite3.Row) -> dict:
+def _account_json(row) -> dict:
     return {"id": row["id"], "name": row["name"], "currency": row["currency"],
             "balance_cents": row["balance_cents"]}
 
 
-def _debit(db: sqlite3.Connection, account_id: int, amount: int, description: str, now: float) -> None:
-    balance = db.execute("SELECT balance_cents FROM accounts WHERE id = ?", (account_id,)).fetchone()[0]
-    if balance < amount:
-        raise HTTPException(422, {"error": "insufficient_funds", "balance_cents": balance})
-    db.execute("UPDATE accounts SET balance_cents = balance_cents - ? WHERE id = ?", (amount, account_id))
+def _debit(db: Database, account_id: int, amount: int, description: str, now: float) -> None:
+    # Check and debit in one atomic statement, so concurrent debits can't overdraw.
+    cur = db.execute("UPDATE accounts SET balance_cents = balance_cents - ? WHERE id = ? AND balance_cents >= ?",
+                     (amount, account_id, amount))
+    if cur.rowcount == 0:
+        balance = db.execute("SELECT balance_cents FROM accounts WHERE id = ?", (account_id,)).fetchone()
+        raise HTTPException(422, {"error": "insufficient_funds", "balance_cents": balance["balance_cents"]})
     db.execute("INSERT INTO transactions (account_id, amount_cents, description, created_at) VALUES (?, ?, ?, ?)",
                (account_id, -amount, description, now))
 
 
-def _queue_payout(db: sqlite3.Connection, account_id: int, amount: int, beneficiary: str,
+def _queue_payout(db: Database, account_id: int, amount: int, beneficiary: str,
                   now: float, delay: float) -> int:
     _debit(db, account_id, amount, f"Payout to {beneficiary}", now)
     return db.execute(
         "INSERT INTO payouts (account_id, amount_cents, beneficiary, status, created_at, dispatch_at) "
-        "VALUES (?, ?, ?, 'queued', ?, ?)",
-        (account_id, amount, beneficiary, now, now + delay)).lastrowid
+        "VALUES (?, ?, ?, 'queued', ?, ?) RETURNING id",
+        (account_id, amount, beneficiary, now, now + delay)).fetchone()["id"]
 
 
-def _seed_demo_accounts(db: sqlite3.Connection, customer_id: int, now: float) -> None:
+def _seed_demo_accounts(db: Database, customer_id: int, now: float) -> None:
     rng = random.Random(customer_id)
-    checking = db.execute("INSERT INTO accounts (customer_id, name, balance_cents) VALUES (?, 'Checking', 500000)",
-                          (customer_id,)).lastrowid
+    checking = db.execute("INSERT INTO accounts (customer_id, name, balance_cents) "
+                          "VALUES (?, 'Checking', 500000) RETURNING id", (customer_id,)).fetchone()["id"]
     db.execute("INSERT INTO accounts (customer_id, name, balance_cents) VALUES (?, 'Savings', 2000000)",
                (customer_id,))
     merchants = ["Coffee Co", "Grocer", "Metro Transit", "Bookshop", "Salary", "Rent", "Utilities"]
+    rows = []
     for i in range(60):
         merchant = rng.choice(merchants)
         amount = rng.randint(30000, 400000) if merchant == "Salary" else -rng.randint(300, 25000)
-        db.execute("INSERT INTO transactions (account_id, amount_cents, description, created_at) VALUES (?, ?, ?, ?)",
-                   (checking, amount, merchant, now - (60 - i) * 3600))
+        rows.append((checking, amount, merchant, now - (60 - i) * 3600))
+    db.executemany("INSERT INTO transactions (account_id, amount_cents, description, created_at) VALUES (?, ?, ?, ?)",
+                   rows)
 
 
 # ---------- onboarding & keys ----------
 
 @app.post("/v1/signup", status_code=201, tags=["keys"])
-def signup(body: SignupIn, request: Request, db: sqlite3.Connection = Depends(get_db)):
+def signup(body: SignupIn, request: Request, db: Database = Depends(get_db)):
     """Create a customer, two demo accounts, and the first API key (shown once)."""
+    # Reject duplicates before taking a signup slot, so a double-click doesn't use up
+    # the IP's hourly allowance. The UNIQUE constraint still catches races below.
+    if db.execute("SELECT 1 FROM customers WHERE email = ?", (body.email,)).fetchone():
+        raise HTTPException(409, {"error": "email_taken"})
     enforce(request, policies.limiters.signups, f"ip:{client_ip(request)}",
             "Too many signups from this IP. Try again within the hour.")
     now = time.time()
-    db.execute("BEGIN IMMEDIATE")
+    db.begin()
     try:
-        customer_id = db.execute("INSERT INTO customers (name, email, plan, created_at) VALUES (?, ?, ?, ?)",
-                                 (body.name, body.email, body.plan, now)).lastrowid
+        customer_id = db.execute("INSERT INTO customers (name, email, plan, created_at) VALUES (?, ?, ?, ?) "
+                                 "RETURNING id", (body.name, body.email, body.plan, now)).fetchone()["id"]
         full_key, prefix, key_hash = generate_api_key()
         db.execute("INSERT INTO api_keys (customer_id, name, prefix, key_hash, created_at) VALUES (?, ?, ?, ?, ?)",
                    (customer_id, "default", prefix, key_hash, now))
         _seed_demo_accounts(db, customer_id, now)
-        db.execute("COMMIT")
-    except sqlite3.IntegrityError:
-        db.execute("ROLLBACK")
+        db.commit()
+    except IntegrityError:
+        db.rollback()
         raise HTTPException(409, {"error": "email_taken"})
     return {"customer_id": customer_id, "plan": body.plan, "api_key": full_key,
             "warning": "Store this key now. Only a hash is kept; it cannot be shown again."}
 
 
 @app.get("/v1/keys", tags=["keys"])
-def list_keys(client: Client = Depends(management_client), db: sqlite3.Connection = Depends(get_db)):
+def list_keys(client: Client = Depends(management_client), db: Database = Depends(get_db)):
     rows = db.execute("SELECT id, name, prefix, created_at, last_used_at, revoked_at FROM api_keys "
                       "WHERE customer_id = ? ORDER BY id", (client.customer_id,)).fetchall()
     return {"data": [{**dict(r), "hint": f"bk_live_{r['prefix']}_…"} for r in rows]}
 
 
 @app.post("/v1/keys", status_code=201, tags=["keys"])
-def create_key(body: KeyIn, client: Client = Depends(management_client), db: sqlite3.Connection = Depends(get_db)):
+def create_key(body: KeyIn, client: Client = Depends(management_client), db: Database = Depends(get_db)):
     full_key, prefix, key_hash = generate_api_key()
-    key_id = db.execute("INSERT INTO api_keys (customer_id, name, prefix, key_hash, created_at) VALUES (?, ?, ?, ?, ?)",
-                        (client.customer_id, body.name, prefix, key_hash, time.time())).lastrowid
+    key_id = db.execute("INSERT INTO api_keys (customer_id, name, prefix, key_hash, created_at) "
+                        "VALUES (?, ?, ?, ?, ?) RETURNING id",
+                        (client.customer_id, body.name, prefix, key_hash, time.time())).fetchone()["id"]
     return {"id": key_id, "name": body.name, "api_key": full_key}
 
 
 @app.delete("/v1/keys/{key_id}", tags=["keys"])
-def revoke_key(key_id: int, client: Client = Depends(management_client), db: sqlite3.Connection = Depends(get_db)):
+def revoke_key(key_id: int, client: Client = Depends(management_client), db: Database = Depends(get_db)):
     cur = db.execute("UPDATE api_keys SET revoked_at = ? WHERE id = ? AND customer_id = ? AND revoked_at IS NULL",
                      (time.time(), key_id, client.customer_id))
     if cur.rowcount == 0:
@@ -175,13 +184,13 @@ def revoke_key(key_id: int, client: Client = Depends(management_client), db: sql
 # ---------- accounts (token bucket + daily quota) ----------
 
 @app.get("/v1/accounts", tags=["banking"])
-def list_accounts(client: Client = Depends(metered_client), db: sqlite3.Connection = Depends(get_db)):
+def list_accounts(client: Client = Depends(metered_client), db: Database = Depends(get_db)):
     rows = db.execute("SELECT * FROM accounts WHERE customer_id = ? ORDER BY id", (client.customer_id,)).fetchall()
     return {"data": [_account_json(r) for r in rows]}
 
 
 @app.get("/v1/accounts/{account_id}/balance", tags=["banking"])
-def get_balance(account_id: int, client: Client = Depends(metered_client), db: sqlite3.Connection = Depends(get_db)):
+def get_balance(account_id: int, client: Client = Depends(metered_client), db: Database = Depends(get_db)):
     return _account_json(_own_account(db, client, account_id))
 
 
@@ -191,7 +200,7 @@ def list_transactions(
     limit: int = Query(20, ge=1, le=100),
     cursor: Optional[str] = None,
     client: Client = Depends(metered_client),
-    db: sqlite3.Connection = Depends(get_db),
+    db: Database = Depends(get_db),
 ):
     _own_account(db, client, account_id)
     before_id = decode_cursor(cursor)
@@ -219,7 +228,7 @@ def create_transfer(
     request: Request,
     idempotency_key: str = Header("", alias="Idempotency-Key"),
     client: Client = Depends(metered_client),
-    db: sqlite3.Connection = Depends(get_db),
+    db: Database = Depends(get_db),
 ):
     """Move money between accounts. Requires an Idempotency-Key header.
 
@@ -241,8 +250,8 @@ def create_transfer(
         db.execute("UPDATE accounts SET balance_cents = balance_cents + ? WHERE id = ?",
                    (body.amount_cents, body.to_account_id))
         tx_id = db.execute("INSERT INTO transactions (account_id, amount_cents, description, created_at) "
-                           "VALUES (?, ?, ?, ?)",
-                           (body.to_account_id, body.amount_cents, body.description, now)).lastrowid
+                           "VALUES (?, ?, ?, ?) RETURNING id",
+                           (body.to_account_id, body.amount_cents, body.description, now)).fetchone()["id"]
         return {"id": tx_id, "status": "completed", **body.model_dump(), "created_at": now}
 
     return run_idempotent(db, client.api_key_id, idempotency_key, body.model_dump(), 201, handler)
@@ -256,7 +265,7 @@ def create_payout(
     request: Request,
     idempotency_key: str = Header("", alias="Idempotency-Key"),
     client: Client = Depends(metered_client),
-    db: sqlite3.Connection = Depends(get_db),
+    db: Database = Depends(get_db),
 ):
     """Queue a payout to an external bank.
 
@@ -283,7 +292,7 @@ def create_payout_batch(
     body: PayoutBatchIn,
     idempotency_key: str = Header("", alias="Idempotency-Key"),
     client: Client = Depends(metered_client),
-    db: sqlite3.Connection = Depends(get_db),
+    db: Database = Depends(get_db),
 ):
     """Submit a payroll-style batch (up to 100 payouts) in one API call.
 
@@ -321,7 +330,7 @@ def list_payouts(
     limit: int = Query(20, ge=1, le=100),
     cursor: Optional[str] = None,
     client: Client = Depends(metered_client),
-    db: sqlite3.Connection = Depends(get_db),
+    db: Database = Depends(get_db),
 ):
     before_id = decode_cursor(cursor)
     sql = ("SELECT p.* FROM payouts p JOIN accounts a ON a.id = p.account_id WHERE a.customer_id = ?"
@@ -339,12 +348,12 @@ def list_payouts(
 # ---------- usage & dashboard ----------
 
 @app.get("/v1/usage", tags=["usage"])
-def get_usage(client: Client = Depends(management_client), db: sqlite3.Connection = Depends(get_db)):
+def get_usage(client: Client = Depends(management_client), db: Database = Depends(get_db)):
     return usage_report(db, client.customer_id, client.plan)
 
 
 @app.get("/v1/limits", tags=["usage"])
-def get_limits(client: Client = Depends(management_client), db: sqlite3.Connection = Depends(get_db)):
+def get_limits(client: Client = Depends(management_client), db: Database = Depends(get_db)):
     """Live state of every limiter that applies to this key, read with peek() so
     looking doesn't consume anything. Call it between other requests to watch the
     token bucket drain and refill, the transfer window slide, and the payout queue empty."""

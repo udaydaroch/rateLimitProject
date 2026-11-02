@@ -1,12 +1,12 @@
+import fakeredis
 import pytest
 
 from app.ratelimit import (
+    REDIS_STRATEGIES,
     STRATEGIES,
     FixedWindow,
-    LeakyBucket,
     RateLimiter,
     SlidingWindowLog,
-    TokenBucket,
     create_strategy,
 )
 
@@ -27,14 +27,26 @@ def clock():
     return FakeClock()
 
 
+@pytest.fixture(params=["memory", "redis"])
+def make(request, clock):
+    """Builds a strategy on each backend: every algorithm test runs against both
+    the in-process implementation and the Redis + Lua implementation."""
+    redis = fakeredis.FakeRedis() if request.param == "redis" else None
+
+    def build(algorithm, **params):
+        return create_strategy(algorithm, backend=request.param, redis=redis, clock=clock, **params)
+
+    return build
+
+
 def allowed(strategy, key, n):
     return [strategy.acquire(key).allowed for _ in range(n)]
 
 
 # ---- token bucket ----
 
-def test_token_bucket_allows_burst_then_refills(clock):
-    tb = TokenBucket(capacity=5, refill_rate=1, clock=clock)
+def test_token_bucket_allows_burst_then_refills(make, clock):
+    tb = make("token_bucket", capacity=5, refill_rate=1)
     assert allowed(tb, "k", 6) == [True] * 5 + [False]
 
     denied = tb.acquire("k")
@@ -44,23 +56,23 @@ def test_token_bucket_allows_burst_then_refills(clock):
     assert allowed(tb, "k", 3) == [True, True, False]
 
 
-def test_token_bucket_never_exceeds_capacity(clock):
-    tb = TokenBucket(capacity=3, refill_rate=10, clock=clock)
+def test_token_bucket_never_exceeds_capacity(make, clock):
+    tb = make("token_bucket", capacity=3, refill_rate=10)
     clock.advance(1_000)
     assert allowed(tb, "k", 4) == [True, True, True, False]
 
 
-def test_token_bucket_keys_are_independent(clock):
-    tb = TokenBucket(capacity=1, refill_rate=1, clock=clock)
+def test_token_bucket_keys_are_independent(make):
+    tb = make("token_bucket", capacity=1, refill_rate=1)
     assert tb.acquire("a").allowed and tb.acquire("b").allowed
     assert not tb.acquire("a").allowed
 
 
 # ---- sliding window ----
 
-def test_sliding_window_blocks_boundary_burst(clock):
+def test_sliding_window_blocks_boundary_burst(make, clock):
     clock.now = 59.0  # just before a minute boundary
-    sw = SlidingWindowLog(limit=5, window=60, clock=clock)
+    sw = make("sliding_window", limit=5, window=60)
     assert allowed(sw, "acct", 5) == [True] * 5
 
     clock.advance(1.5)  # crosses the minute boundary; a fixed window would reset here
@@ -72,10 +84,10 @@ def test_sliding_window_blocks_boundary_burst(clock):
     assert sw.acquire("acct").allowed
 
 
-def test_fixed_window_allows_boundary_burst(clock):
+def test_fixed_window_allows_boundary_burst(make, clock):
     """The weakness that makes fixed windows wrong for transfer velocity."""
     clock.now = 59.0
-    fw = FixedWindow(limit=5, window=60, clock=clock)
+    fw = make("fixed_window", limit=5, window=60)
     assert allowed(fw, "acct", 5) == [True] * 5
     clock.advance(1.5)
     assert allowed(fw, "acct", 5) == [True] * 5  # 10 requests within 1.5 seconds
@@ -83,9 +95,9 @@ def test_fixed_window_allows_boundary_burst(clock):
 
 # ---- fixed window ----
 
-def test_fixed_window_resets_on_boundary(clock):
+def test_fixed_window_resets_on_boundary(make, clock):
     clock.now = 120.0
-    fw = FixedWindow(limit=2, window=60, clock=clock)
+    fw = make("fixed_window", limit=2, window=60)
     assert allowed(fw, "c", 3) == [True, True, False]
     d = fw.acquire("c")
     assert d.retry_after == pytest.approx(60.0)
@@ -95,8 +107,8 @@ def test_fixed_window_resets_on_boundary(clock):
 
 # ---- leaky bucket ----
 
-def test_leaky_bucket_queues_with_increasing_delay(clock):
-    lb = LeakyBucket(capacity=3, leak_rate=1, clock=clock)
+def test_leaky_bucket_queues_with_increasing_delay(make, clock):
+    lb = make("leaky_bucket", capacity=3, leak_rate=1)
     delays = [lb.acquire("cust").delay for _ in range(3)]
     assert delays == pytest.approx([0, 1, 2])  # dispatched one per second
     overflow = lb.acquire("cust")
@@ -109,14 +121,14 @@ def test_leaky_bucket_queues_with_increasing_delay(clock):
 
 # ---- peek (shared interface) ----
 
-@pytest.mark.parametrize("strategy_factory", [
-    lambda c: TokenBucket(capacity=2, refill_rate=1, clock=c),
-    lambda c: SlidingWindowLog(limit=2, window=60, clock=c),
-    lambda c: FixedWindow(limit=2, window=60, clock=c),
-    lambda c: LeakyBucket(capacity=2, leak_rate=1, clock=c),
+@pytest.mark.parametrize("algorithm,params", [
+    ("token_bucket", {"capacity": 2, "refill_rate": 1}),
+    ("sliding_window", {"limit": 2, "window": 60}),
+    ("fixed_window", {"limit": 2, "window": 60}),
+    ("leaky_bucket", {"capacity": 2, "leak_rate": 1}),
 ])
-def test_peek_never_consumes(clock, strategy_factory):
-    s = strategy_factory(clock)
+def test_peek_never_consumes(make, algorithm, params):
+    s = make(algorithm, **params)
     for _ in range(10):
         assert s.peek("k").allowed
     assert allowed(s, "k", 3) == [True, True, False]
@@ -152,11 +164,31 @@ def test_factory_builds_every_registered_strategy():
         "fixed_window": {"limit": 1, "window": 1},
         "leaky_bucket": {"capacity": 1, "leak_rate": 1},
     }
-    assert set(params) == set(STRATEGIES)
+    assert set(params) == set(STRATEGIES) == set(REDIS_STRATEGIES)
+    redis = fakeredis.FakeRedis()
     for name, p in params.items():
         assert create_strategy(name, **p).policy == name
+        assert create_strategy(name, backend="redis", redis=redis, **p).policy == name
 
 
 def test_factory_rejects_unknown_algorithm():
     with pytest.raises(ValueError, match="unknown rate limit algorithm"):
         create_strategy("magic_bucket")
+
+
+def test_redis_strategies_share_state_across_instances(clock):
+    """Two app instances (two strategy objects) on one Redis see the same bucket,
+    which is the whole reason for the Redis backend on serverless hosting."""
+    redis = fakeredis.FakeRedis()
+    instance_a = create_strategy("token_bucket", backend="redis", redis=redis, clock=clock, capacity=3, refill_rate=1)
+    instance_b = create_strategy("token_bucket", backend="redis", redis=redis, clock=clock, capacity=3, refill_rate=1)
+    assert [instance_a.acquire("k").allowed, instance_b.acquire("k").allowed,
+            instance_a.acquire("k").allowed, instance_b.acquire("k").allowed] == [True, True, True, False]
+
+
+def test_reset_clears_redis_state(clock):
+    fw = create_strategy("fixed_window", backend="redis", redis=fakeredis.FakeRedis(), clock=clock,
+                         limit=1, window=60)
+    assert fw.acquire("k").allowed and not fw.acquire("k").allowed
+    fw.reset("k")
+    assert fw.acquire("k").allowed

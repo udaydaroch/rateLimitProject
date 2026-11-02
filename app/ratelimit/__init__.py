@@ -1,5 +1,5 @@
 from .base import Decision, RateLimitStrategy
-from .factory import STRATEGIES, create_strategy
+from .factory import REDIS_STRATEGIES, STRATEGIES, create_strategy
 from .fixed_window import FixedWindow
 from .leaky_bucket import LeakyBucket
 from .limiter import RateLimiter
@@ -11,6 +11,7 @@ __all__ = [
     "RateLimitStrategy",
     "RateLimiter",
     "STRATEGIES",
+    "REDIS_STRATEGIES",
     "create_strategy",
     "FixedWindow",
     "LeakyBucket",

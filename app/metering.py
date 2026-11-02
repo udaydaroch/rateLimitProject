@@ -1,9 +1,9 @@
 """Usage reporting and billing estimates built from `usage_events`."""
 import datetime as dt
-import sqlite3
 from typing import Dict
 
 from . import policies
+from .db import Database
 from .policies import Plan
 
 
@@ -11,15 +11,15 @@ def _utc_day_start(now: dt.datetime) -> dt.datetime:
     return now.replace(hour=0, minute=0, second=0, microsecond=0)
 
 
-def usage_report(db: sqlite3.Connection, customer_id: int, plan: Plan, days: int = 14) -> Dict:
+def usage_report(db: Database, customer_id: int, plan: Plan, days: int = 14) -> Dict:
     now = dt.datetime.now(dt.timezone.utc)
     today = _utc_day_start(now)
     since = today - dt.timedelta(days=days - 1)
     month_start = today.replace(day=1)
 
     daily_rows = db.execute(
-        "SELECT date(created_at, 'unixepoch') AS day, COUNT(*) AS calls, SUM(billable) AS billable, "
-        "SUM(status_code = 429) AS rate_limited "
+        "SELECT day, COUNT(*) AS calls, SUM(billable) AS billable, "
+        "SUM(CASE WHEN status_code = 429 THEN 1 ELSE 0 END) AS rate_limited "
         "FROM usage_events WHERE customer_id = ? AND created_at >= ? GROUP BY day ORDER BY day",
         (customer_id, min(since, month_start).timestamp()),
     ).fetchall()
@@ -37,7 +37,7 @@ def usage_report(db: sqlite3.Connection, customer_id: int, plan: Plan, days: int
         })
 
     endpoint_rows = db.execute(
-        "SELECT endpoint, COUNT(*) AS calls, SUM(status_code = 429) AS rate_limited "
+        "SELECT endpoint, COUNT(*) AS calls, SUM(CASE WHEN status_code = 429 THEN 1 ELSE 0 END) AS rate_limited "
         "FROM usage_events WHERE customer_id = ? AND created_at >= ? GROUP BY endpoint ORDER BY calls DESC",
         (customer_id, month_start.timestamp()),
     ).fetchall()

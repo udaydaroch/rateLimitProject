@@ -14,12 +14,13 @@ transaction, so a crash can never leave "money moved but key not completed".
 """
 import hashlib
 import json
-import sqlite3
 import time
 from typing import Any, Callable, Optional, Tuple
 
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse
+
+from .db import Database
 
 TTL_SECONDS = 24 * 60 * 60
 STALE_IN_FLIGHT_SECONDS = 60  # an in-flight marker this old belongs to a crashed request
@@ -29,22 +30,23 @@ def request_fingerprint(payload: dict) -> str:
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
 
 
-def _begin(db: sqlite3.Connection, api_key_id: int, key: str, fingerprint: str) -> Optional[Tuple[int, Any]]:
+def _begin(db: Database, api_key_id: int, key: str, fingerprint: str) -> Optional[Tuple[int, Any]]:
     now = time.time()
     db.execute(
         "DELETE FROM idempotency_keys WHERE api_key_id = ? AND key = ? "
         "AND (created_at < ? OR (status_code IS NULL AND created_at < ?))",
         (api_key_id, key, now - TTL_SECONDS, now - STALE_IN_FLIGHT_SECONDS),
     )
-    try:
-        db.execute(
-            "INSERT INTO idempotency_keys (api_key_id, key, request_hash, created_at) VALUES (?, ?, ?, ?)",
-            (api_key_id, key, fingerprint, now),
-        )
-        return None
-    except sqlite3.IntegrityError:
-        row = db.execute("SELECT request_hash, status_code, response_body FROM idempotency_keys "
-                         "WHERE api_key_id = ? AND key = ?", (api_key_id, key)).fetchone()
+    inserted = db.execute(
+        "INSERT INTO idempotency_keys (api_key_id, key, request_hash, created_at) VALUES (?, ?, ?, ?) "
+        "ON CONFLICT (api_key_id, key) DO NOTHING",
+        (api_key_id, key, fingerprint, now),
+    ).rowcount
+    if inserted:
+        return None  # first time this key is seen: the caller runs the request
+
+    row = db.execute("SELECT request_hash, status_code, response_body FROM idempotency_keys "
+                     "WHERE api_key_id = ? AND key = ?", (api_key_id, key)).fetchone()
     if row["request_hash"] != fingerprint:
         raise HTTPException(422, {"error": "idempotency_key_reused",
                                   "message": "This Idempotency-Key was used with a different request body."})
@@ -54,17 +56,17 @@ def _begin(db: sqlite3.Connection, api_key_id: int, key: str, fingerprint: str) 
     return row["status_code"], json.loads(row["response_body"])
 
 
-def _complete(db: sqlite3.Connection, api_key_id: int, key: str, status: int, body: Any) -> None:
+def _complete(db: Database, api_key_id: int, key: str, status: int, body: Any) -> None:
     db.execute("UPDATE idempotency_keys SET status_code = ?, response_body = ? WHERE api_key_id = ? AND key = ?",
                (status, json.dumps(body), api_key_id, key))
 
 
-def _abandon(db: sqlite3.Connection, api_key_id: int, key: str) -> None:
+def _abandon(db: Database, api_key_id: int, key: str) -> None:
     db.execute("DELETE FROM idempotency_keys WHERE api_key_id = ? AND key = ?", (api_key_id, key))
 
 
 def run_idempotent(
-    db: sqlite3.Connection,
+    db: Database,
     api_key_id: int,
     key: str,
     payload: dict,
@@ -81,19 +83,19 @@ def run_idempotent(
         return JSONResponse(status_code=status, content=body, headers={"Idempotent-Replayed": "true"})
 
     try:
-        db.execute("BEGIN IMMEDIATE")
+        db.begin()
         body = handler()
         _complete(db, api_key_id, key, status_code, body)
-        db.execute("COMMIT")
+        db.commit()
     except HTTPException as exc:
-        db.execute("ROLLBACK")
+        db.rollback()
         if exc.status_code == 429 or exc.status_code >= 500:
             _abandon(db, api_key_id, key)
         else:
             _complete(db, api_key_id, key, exc.status_code, {"detail": exc.detail})
         raise
     except Exception:
-        db.execute("ROLLBACK")
+        db.rollback()
         _abandon(db, api_key_id, key)
         raise
 
