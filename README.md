@@ -5,7 +5,10 @@ system. Developers sign up, get an API key, and call endpoints for accounts,
 transfers and payouts. Behind those endpoints, **four rate limiting algorithms**
 each guard the part of the bank they're best suited to.
 
-**Live demo:** https://rate-limit-project.vercel.app · [Dashboard](https://rate-limit-project.vercel.app/dashboard) · [Interactive API docs](https://rate-limit-project.vercel.app/docs)
+**Live demo:** https://rate-limit-project.vercel.app · [Dashboard](https://rate-limit-project.vercel.app/dashboard) · [Interactive API docs](https://rate-limit-project.vercel.app/docs) · [Step-by-step guide](https://rate-limit-project.vercel.app/guide)
+
+> **New to the project?** The [step-by-step guide](https://rate-limit-project.vercel.app/guide) explains it in
+> 17 short steps: every algorithm, design decision, trade-off and production bug, each with a self-check question.
 
 Runs on Vercel serverless functions, with **Postgres** (Neon) for customers, keys
 and the ledger, and **Redis** (Upstash) for rate limiter state. All the money is

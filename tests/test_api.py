@@ -275,3 +275,9 @@ def test_duplicate_email_does_not_use_a_signup_slot(client):
     for _ in range(15):
         assert client.post("/v1/signup", json={"name": "A", "email": "dup@ex.com"}).status_code == 409
     assert client.post("/v1/signup", json={"name": "B", "email": "fresh@ex.com"}).status_code == 201
+
+
+def test_dashboard_and_guide_pages_are_served(client):
+    assert "Rate Limit Lab" in client.get("/dashboard").text
+    guide = client.get("/guide")
+    assert guide.status_code == 200 and guide.text.count('class="step"') == 17

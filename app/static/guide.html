@@ -1,0 +1,668 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ledgerline Study Guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: a ledger-style study guide. Sticky step index on the left, one numbered step per section. */
+  :root {
+    --bg: #f4f6f5;
+    --paper: #ffffff;
+    --ink: #17201c;
+    --muted: #56625c;
+    --rule: #dde3df;
+    --accent: #0f6b4f;        /* ledger green */
+    --accent-soft: #e2f0ea;
+    --ok: #13804e; --ok-soft: #def3e7;
+    --warn: #9a5d00; --warn-soft: #f8ecd6;
+    --bad: #b8302c; --bad-soft: #f9e2e0;
+    --code-bg: #eef2f0;
+    --font-display: "Instrument Sans", "Helvetica Neue", Arial, sans-serif;
+    --font-body: "Instrument Sans", "Helvetica Neue", Arial, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1412; --paper: #161d1a; --ink: #e6ece9; --muted: #9aa8a1; --rule: #2a3530;
+      --accent: #5fcf9f; --accent-soft: #17302a;
+      --ok: #5fcf9f; --ok-soft: #153126; --warn: #e5ad52; --warn-soft: #33270f; --bad: #ff7b74; --bad-soft: #3a1a18;
+      --code-bg: #1d2622; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1412; --paper: #161d1a; --ink: #e6ece9; --muted: #9aa8a1; --rule: #2a3530;
+    --accent: #5fcf9f; --accent-soft: #17302a;
+    --ok: #5fcf9f; --ok-soft: #153126; --warn: #e5ad52; --warn-soft: #33270f; --bad: #ff7b74; --bad-soft: #3a1a18;
+    --code-bg: #1d2622; color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); font: 16px/1.65 var(--font-body); }
+  .wrap { max-width: 1180px; margin: 0 auto; padding-block: 40px 96px;
+          padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+          display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 48px; }
+  @media (max-width: 900px) { .wrap { grid-template-columns: minmax(0, 1fr); gap: 24px; } }
+
+  /* index */
+  nav.index { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 24px); align-self: start;
+              max-height: calc(100vh - 48px); overflow-y: auto; font-size: 14px; }
+  @media (max-width: 900px) { nav.index { position: static; max-height: none; } }
+  nav.index .progress { font-size: 13px; color: var(--muted); margin-bottom: 10px; }
+  nav.index .bar { height: 6px; background: var(--rule); border-radius: 3px; overflow: hidden; margin-bottom: 16px; }
+  nav.index .bar div { height: 100%; background: var(--accent); width: 0; transition: width .3s; }
+  nav.index ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+  nav.index a { display: grid; grid-template-columns: 28px 1fr; gap: 6px; padding: 5px 8px; border-radius: 6px;
+                color: var(--muted); text-decoration: none; }
+  nav.index a:hover, nav.index a:focus-visible { background: var(--accent-soft); color: var(--ink); outline: none; }
+  nav.index a .n { font-family: var(--font-mono); font-size: 12px; padding-top: 2px; }
+  nav.index a.done { color: var(--accent); }
+  nav.index a.done .n::after { content: " ✓"; }
+  @media (max-width: 900px) { nav.index ol { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); } }
+
+  /* content */
+  article { min-width: 0; display: grid; gap: 28px; }
+  header.top h1 { font-family: var(--font-display); font-size: clamp(30px, 5vw, 44px); line-height: 1.1;
+                  letter-spacing: -0.02em; margin: 0 0 12px; text-wrap: balance; }
+  header.top p { margin: 0; max-width: 68ch; color: var(--muted); font-size: 17px; }
+  .eyebrow { font: 600 12px/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); margin-bottom: 14px; }
+
+  section.step { background: var(--paper); border: 1px solid var(--rule); border-radius: 14px; padding: 28px;
+                 display: grid; gap: 16px; scroll-margin-top: 20px; }
+  @media (max-width: 560px) { section.step { padding: 20px; } }
+  .step-head { display: flex; gap: 14px; align-items: baseline; flex-wrap: wrap; }
+  .step-head .num { font: 500 13px var(--font-mono); color: var(--accent); }
+  .step-head h2 { font-family: var(--font-display); font-size: 25px; line-height: 1.2; margin: 0; letter-spacing: -0.01em; text-wrap: balance; flex: 1; min-width: 0; }
+  h3 { font-size: 15px; margin: 6px 0 0; font-weight: 600; }
+  p, li { max-width: 72ch; }
+  p { margin: 0; }
+  ul, ol.list { margin: 0; padding-left: 22px; display: grid; gap: 6px; }
+  .lead { font-size: 17px; }
+  code { font-family: var(--font-mono); font-size: 0.86em; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+  pre.code { font: 13px/1.6 var(--font-mono); background: var(--code-bg); border-radius: 10px; padding: 14px 16px; margin: 0; overflow-x: auto; }
+  a { color: var(--accent); }
+
+  /* decision / tradeoff callouts */
+  .callout { border-radius: 10px; padding: 14px 16px; display: grid; gap: 6px; }
+  .callout .label { font: 600 11px/1 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; }
+  .decision { background: var(--accent-soft); }
+  .decision .label { color: var(--accent); }
+  .tradeoff { background: var(--warn-soft); }
+  .tradeoff .label { color: var(--warn); }
+  .bug { background: var(--bad-soft); }
+  .bug .label { color: var(--bad); }
+
+  .table-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-weight: 600; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
+
+  .pill { font: 600 12px var(--font-mono); padding: 1px 7px; border-radius: 999px; white-space: nowrap; }
+  .pill.ok { background: var(--ok-soft); color: var(--ok); }
+  .pill.warn { background: var(--warn-soft); color: var(--warn); }
+  .pill.bad { background: var(--bad-soft); color: var(--bad); }
+
+  .where { font-size: 14px; color: var(--muted); }
+  .where a { font-family: var(--font-mono); font-size: 13px; }
+
+  details.check { border: 1px dashed var(--rule); border-radius: 10px; padding: 12px 16px; }
+  details.check summary { cursor: pointer; font-weight: 600; }
+  details.check summary::marker { color: var(--accent); }
+  details.check[open] summary { margin-bottom: 8px; }
+  details.check p + p { margin-top: 8px; }
+
+  .done-toggle { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); justify-self: start; cursor: pointer; }
+  .done-toggle input { width: 18px; height: 18px; accent-color: var(--accent); }
+
+  .diagram { background: var(--paper); border: 1px solid var(--rule); border-radius: 10px; padding: 12px; overflow-x: auto; }
+  pre.mermaid { margin: 0; background: transparent; }
+
+  .timeline { display: grid; gap: 8px; }
+  .timeline div { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 12px; font-size: 14px; }
+  .timeline b { font-family: var(--font-mono); font-weight: 500; color: var(--muted); }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+<style>body { margin: 0; }</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="index" aria-label="Steps">
+    <div class="progress" id="progressText">0 of 17 steps understood</div>
+    <div class="bar"><div id="progressBar"></div></div>
+    <ol id="indexList"></ol>
+  </nav>
+
+  <article>
+    <header class="top">
+      <div class="eyebrow">Ledgerline · study guide · <a href="/dashboard">try the live dashboard</a></div>
+      <h1>Understand the whole project, one step at a time</h1>
+      <p>This guide walks through the rate-limited banking API in the order you'd explain it in an interview:
+        the problem, the four algorithms, how a request moves through the code, the safety features, and what went wrong
+        when it went live. Every step names the decision, why it was made, what it costs, and where it lives in the code.
+        Tick a step off once you could explain it without notes.</p>
+    </header>
+
+    <!-- 01 -->
+    <section class="step" id="s1" data-title="The big picture">
+      <div class="step-head"><span class="num">STEP 01</span><h2>The big picture</h2></div>
+      <p class="lead">Ledgerline is a pretend bank with a public API. Developers sign up, get an API key, and call
+        endpoints to read balances, move money and pay people. The interesting part is everything that stops those
+        calls from overwhelming or abusing the bank.</p>
+      <div class="diagram"><pre class="mermaid">
+flowchart LR
+  U["Developer / dashboard"] --> V["FastAPI app on Vercel<br/>(many serverless instances)"]
+  V -- "rate limit decisions" --> R[("Redis<br/>Upstash")]
+  V -- "customers, keys, ledger,<br/>idempotency, usage" --> P[("Postgres<br/>Neon")]
+      </pre></div>
+      <p>Three ideas carry the whole project:</p>
+      <ul>
+        <li><b>Four rate limiting algorithms</b>, each used where it fits a real banking problem.</li>
+        <li><b>The Strategy pattern</b>, so every algorithm is interchangeable behind one interface.</li>
+        <li><b>Serverless-safe state</b>: anything shared between requests lives in Postgres or Redis, never in one server's memory.</li>
+      </ul>
+      <p class="where">Live: <a href="https://rate-limit-project.vercel.app/dashboard">rate-limit-project.vercel.app</a> ·
+        Code: <a href="https://github.com/udaydaroch/rateLimitProject">github.com/udaydaroch/rateLimitProject</a></p>
+      <details class="check"><summary>Check yourself: describe the project in two sentences.</summary>
+        <p>"It's a sandbox banking API where developers get keys and move fake money. I used it to show how four rate
+          limiting algorithms solve different problems: burst control, fraud limits, payment smoothing and billing
+          quotas. It runs on serverless infrastructure with Postgres and Redis."</p></details>
+      <label class="done-toggle"><input type="checkbox" id="done-s1" data-done="s1"> I understand this step</label>
+    </section>
+
+    <!-- 02 -->
+    <section class="step" id="s2" data-title="What rate limiting is">
+      <div class="step-head"><span class="num">STEP 02</span><h2>What rate limiting is, and why a bank needs it</h2></div>
+      <p>Rate limiting means deciding, for each incoming request, "is this caller allowed to do this right now?"
+        When the answer is no, the API returns <span class="pill bad">429 Too Many Requests</span> with a
+        <code>Retry-After</code> header saying how many seconds to wait.</p>
+      <p>A bank needs it for different reasons in different places:</p>
+      <div class="table-wrap"><table>
+        <tr><th>Risk</th><th>What could go wrong</th><th>Limit that handles it</th></tr>
+        <tr><td>Overload</td><td>One buggy client hammers the API and slows it for everyone.</td><td>Token bucket per API key</td></tr>
+        <tr><td>Fraud</td><td>A stolen account is drained with many quick transfers.</td><td>Sliding window per account</td></tr>
+        <tr><td>Downstream limits</td><td>The payment network between banks rejects spikes.</td><td>Leaky bucket per customer</td></tr>
+        <tr><td>Business rules</td><td>Plans are sold as "1,000 calls a day".</td><td>Fixed window per customer</td></tr>
+        <tr><td>Brute force</td><td>Someone guesses API keys over and over.</td><td>Fixed window per IP</td></tr>
+      </table></div>
+      <div class="callout decision"><div class="label">Decision</div>
+        <p>Use a <b>different algorithm for each job</b> instead of one global limit. This is the core idea of the project: no single algorithm is best, each makes a different trade-off.</p></div>
+      <p>Every limit is <b>keyed</b>: it counts per something (per API key, per account, per IP). The key decides
+        <i>who</i> shares a limit. Transfers are keyed per <i>account</i> because the fraud risk is about money leaving one account,
+        regardless of which API key sends it.</p>
+      <details class="check"><summary>Check yourself: why is the transfer limit keyed by account and not by API key?</summary>
+        <p>Because the thing being protected is the money in the account. A customer could have several API keys; if the
+          limit were per key, an attacker with two keys could double the drain rate.</p></details>
+      <label class="done-toggle"><input type="checkbox" id="done-s2" data-done="s2"> I understand this step</label>
+    </section>
+
+    <!-- 03 -->
+    <section class="step" id="s3" data-title="Tech stack choices">
+      <div class="step-head"><span class="num">STEP 03</span><h2>The tech stack, and why each piece</h2></div>
+      <div class="table-wrap"><table>
+        <tr><th>Piece</th><th>Choice</th><th>Why</th></tr>
+        <tr><td>Language</td><td>Python 3</td><td>Was already on the machine (no Node). Readable, and good for explaining algorithms.</td></tr>
+        <tr><td>Web framework</td><td>FastAPI</td><td>Its <b>dependency injection</b> makes "authenticate, then rate limit, then run the endpoint" a clean chain. Free interactive docs at <code>/docs</code>.</td></tr>
+        <tr><td>Database</td><td>SQLite locally, Postgres (Neon) live</td><td>Zero setup for development and tests; a real shared, transactional database in production.</td></tr>
+        <tr><td>Limiter state</td><td>In memory locally, Redis (Upstash) live</td><td>Redis is fast, atomic with Lua scripts, and shared by every server instance.</td></tr>
+        <tr><td>Hosting</td><td>Vercel</td><td>Free, deploys on every <code>git push</code>, supports FastAPI natively.</td></tr>
+        <tr><td>Dashboard</td><td>One HTML file, plain JavaScript</td><td>No build step; it just calls the public API like any other client.</td></tr>
+      </table></div>
+      <div class="callout tradeoff"><div class="label">Trade-off</div>
+        <p>Supporting two databases (SQLite and Postgres) means writing SQL that works on both. The project uses a small
+          adapter and only portable features: <code>RETURNING id</code>, <code>ON CONFLICT DO NOTHING</code>, and <code>CASE WHEN</code> instead of database-specific tricks.</p></div>
+      <p class="where">Where: <a href="https://github.com/udaydaroch/rateLimitProject/blob/main/app/db.py">app/db.py</a> (database adapter) ·
+        <a href="https://github.com/udaydaroch/rateLimitProject/blob/main/app/policies.py">app/policies.py</a> (which limit uses which algorithm)</p>
+      <details class="check"><summary>Check yourself: why keep SQLite at all once Postgres exists?</summary>
+        <p>So anyone can clone the repo and run it, or run the 67 tests in about 2 seconds, without creating any cloud accounts.
+          Production sets <code>DATABASE_URL</code> and <code>REDIS_URL</code>; without them the app falls back to local storage.</p></details>
+      <label class="done-toggle"><input type="checkbox" id="done-s3" data-done="s3"> I understand this step</label>
+    </section>
+
+    <!-- 04 -->
+    <section class="step" id="s4" data-title="Token bucket">
+      <div class="step-head"><span class="num">STEP 04</span><h2>Algorithm 1: token bucket (everyday requests)</h2></div>
+      <p class="lead">Each API key has a cup holding up to <b>10 tokens</b> (free plan). Each request spends one token.
+        Tokens drip back at <b>2 per second</b>. An empty cup means 429.</p>
+      <p>It stores only two numbers per key: <code>tokens</code> and <code>last_refill_time</code>. There's no background
+        timer; on each request it works out how many tokens have dripped in since last time:</p>
+      <pre class="code">tokens = min(capacity, tokens + (now - last) * refill_rate)   # catch up
+if tokens &gt;= 1:
+    tokens -= 1                                                # allowed
+else:
+    retry_after = (1 - tokens) / refill_rate                   # time until 1 token exists</pre>
+      <div class="timeline">
+        <div><b>t = 0.0 s</b><span>App opens, fires 10 calls at once. Tokens 10 → 0. All <span class="pill ok">200</span></span></div>
+        <div><b>t = 0.0 s</b><span>11th call: no tokens. <span class="pill bad">429</span>, retry after 1 ÷ 2 = 0.5 s</span></div>
+        <div><b>t = 0.5 s</b><span>One token has dripped in. Call succeeds. <span class="pill ok">200</span></span></div>
+        <div><b>t = 5.5 s</b><span>Quiet for 5 s: cup full again (capped at 10).</span></div>
+      </div>
+      <div class="callout decision"><div class="label">Decision</div>
+        <p>Use it for general API traffic because real apps are <b>bursty</b>: many calls on launch, then nothing. It allows the
+          burst but caps the long-run average.</p></div>
+      <div class="callout tradeoff"><div class="label">Trade-off</div>
+        <p>It doesn't smooth traffic: a full burst of 10 hits the server at once. That's fine for protecting our own API,
+          but wrong for a slow system downstream (see the leaky bucket in step 07).</p></div>
+      <p class="where">Where: <a href="https://github.com/udaydaroch/rateLimitProject/blob/main/app/ratelimit/token_bucket.py">app/ratelimit/token_bucket.py</a></p>
+      <details class="check"><summary>Check yourself: why does a blocked call say <code>RateLimit-Reset: 5</code>?</summary>
+        <p>Reset is the time until the bucket is completely full. An empty bucket of 10 refilling at 2/s needs 10 ÷ 2 = 5 s.</p></details>
+      <label class="done-toggle"><input type="checkbox" id="done-s4" data-done="s4"> I understand this step</label>
+    </section>
+
+    <!-- 05 -->
+    <section class="step" id="s5" data-title="Sliding window">
+      <div class="step-head"><span class="num">STEP 05</span><h2>Algorithm 2: sliding window log (transfer fraud limit)</h2></div>
+      <p class="lead">At most <b>5 transfers out of one account in any 60 seconds</b>. "Any 60 seconds" means the 60 seconds
+        ending right now, so the window slides with the clock.</p>
+      <p>It keeps the timestamp of every accepted transfer. On a new transfer it throws away timestamps older than 60 s, then counts what's left:</p>
+      <pre class="code">while log and log[0] &lt;= now - 60:
+    log.popleft()                       # slid out of the window
+if len(log) &lt; 5:
+    log.append(now)                     # allowed
+else:
+    retry_after = log[0] + 60 - now     # when the oldest one expires</pre>
+      <h3>Why not a simpler fixed window?</h3>
+      <p>A fixed window resets at each minute boundary. An attacker could send 5 transfers at 12:00:59 and 5 more at
+        12:01:00, which makes <b>10 in one second</b>, all allowed. The sliding window has no boundary to exploit.
+        Both behaviours are proven by tests: <code>test_fixed_window_allows_boundary_burst</code> and
+        <code>test_sliding_window_blocks_boundary_burst</code>.</p>
+      <div class="callout decision"><div class="label">Decision</div>
+        <p>Use the exact (log) version because this is a security control. Exactness matters more than memory here.</p></div>
+      <div class="callout tradeoff"><div class="label">Trade-off</div>
+        <p>Memory grows with the limit: it stores up to 5 timestamps per account. For a limit like 10,000/hour you'd use a
+          <b>sliding window counter</b> instead, which approximates this with two fixed-window counts and O(1) memory.</p></div>
+      <p class="where">Where: <a href="https://github.com/udaydaroch/rateLimitProject/blob/main/app/ratelimit/sliding_window.py">app/ratelimit/sliding_window.py</a></p>
+      <details class="check"><summary>Check yourself: 5 transfers at :10 :20 :30 :40 :50. When can the 6th go through?</summary>
+        <p>At 12:01:10 or later, when the 12:00:10 entry is more than 60 seconds old and slides out.</p></details>
+      <label class="done-toggle"><input type="checkbox" id="done-s5" data-done="s5"> I understand this step</label>
+    </section>
+
+    <!-- 06 -->
+    <section class="step" id="s6" data-title="Fixed window">
+      <div class="step-head"><span class="num">STEP 06</span><h2>Algorithm 3: fixed window (quotas, lockouts, signups)</h2></div>
+      <p class="lead">Time is cut into aligned blocks (each UTC day, each minute, each hour) with one counter per block.
+        When the block changes, the count starts again at zero.</p>
+      <pre class="code">window_id = int(now // window_length)      # e.g. "day number since 1970"
+if stored_window_id != window_id:
+    count = 0                              # new window
+if count &lt; limit:
+    count += 1                             # allowed</pre>
+      <p>It's used in three places:</p>
+      <ul>
+        <li><b>Daily quota</b>: free plan 1,000 calls/day, reset at midnight UTC. Pro plan 50,000/day, and going over is
+          <i>billed</i> (overage) instead of blocked.</li>
+        <li><b>Auth lockout</b>: 20 wrong API keys from one IP in a minute locks that IP until the minute ends.</li>
+        <li><b>Signups</b>: 10 new test customers per IP per hour on the public site.</li>
+      </ul>
+      <div class="callout decision"><div class="label">Decision</div>
+        <p>Quotas are a <b>contract and billing</b> idea. Customers need a predictable reset ("every day at midnight UTC")
+          they can see on an invoice. A rolling 24 hours would be impossible to explain on a bill.</p></div>
+      <div class="callout tradeoff"><div class="label">Trade-off</div>
+        <p>The boundary loophole from step 05 exists here too (up to 2× the limit around midnight). For a daily quota or a
+          lockout that doesn't matter, and it's the cheapest algorithm: one integer per key.</p></div>
+      <p class="where">Where: <a href="https://github.com/udaydaroch/rateLimitProject/blob/main/app/ratelimit/fixed_window.py">app/ratelimit/fixed_window.py</a> ·
+        overage logic in <a href="https://github.com/udaydaroch/rateLimitProject/blob/main/app/deps.py">app/deps.py</a> (<code>metered_client</code>)</p>
+      <details class="check"><summary>Check yourself: same algorithm, but free plan blocks and pro plan doesn't. How?</summary>
+        <p>The limiter only reports "over the limit". What happens next is a business decision in <code>metered_client</code>:
+          free plans raise a 429, pro plans serve the request, add an <code>X-Quota-Overage: true</code> header, and bill it at the overage rate.</p></details>
+      <label class="done-toggle"><input type="checkbox" id="done-s6" data-done="s6"> I understand this step</label>
+    </section>
+
+    <!-- 07 -->
+    <section class="step" id="s7" data-title="Leaky bucket">
+      <div class="step-head"><span class="num">STEP 07</span><h2>Algorithm 4: leaky bucket (payroll payouts)</h2></div>
+      <p class="lead">Payouts pour into a bucket that holds <b>20</b> and drains at a constant <b>1 per second</b>. If a new
+        payout would overflow it, that payout is rejected. Because the drain is constant, each payout's position tells
+        you exactly when it will be sent.</p>
+      <pre class="code">level = max(0, level - (now - last) * leak_rate)   # drain since last time
+if level + 1 &lt;= capacity:
+    delay = level / leak_rate                       # everyone ahead of me goes first
+    level += 1                                      # accepted, sent at now + delay
+else:
+    retry_after = (level + 1 - capacity) / leak_rate</pre>
+      <p>Submitting payroll for 22 people at once: payouts 1–20 are accepted with delays 0, 1, 2 … 19 seconds, and 21–22
+        are rejected as <code>queue_full</code>.</p>
+      <h3>Token bucket vs leaky bucket</h3>
+      <p>Both use a "bucket", but they do opposite jobs. A <b>token bucket lets bursts through</b> to the server, as long
+        as the average stays under the limit. A <b>leaky bucket absorbs bursts and sends work on at a fixed pace</b>, so
+        whatever is downstream never sees a spike. Use the first to protect yourself, the second to protect someone slower than you.</p>
+      <div class="callout decision"><div class="label">Decision</div>
+        <p>Payment networks between banks accept a steady rate and penalise spikes, so payouts are <b>shaped</b>, not just capped.
+          The batch endpoint costs one API token for the whole batch, but each payout passes the leaky bucket individually.</p></div>
+      <div class="callout tradeoff"><div class="label">Honest limitation</div>
+        <p>There's no real payment network. A payout's status flips from <code>queued</code> to <code>dispatched</code> once its
+          <code>dispatch_at</code> time passes. A real system would have a background worker sending them.</p></div>
+      <p class="where">Where: <a href="https://github.com/udaydaroch/rateLimitProject/blob/main/app/ratelimit/leaky_bucket.py">app/ratelimit/leaky_bucket.py</a> ·
+        <code>create_payout_batch</code> in <a href="https://github.com/udaydaroch/rateLimitProject/blob/main/app/main.py">app/main.py</a></p>
+      <details class="check"><summary>Check yourself: why does a payroll batch have a per-item result instead of failing as a whole?</summary>
+        <p>So the 20 that fit go out on time and the client can resubmit just the rejected ones later. Rejecting the whole
+          batch because two didn't fit would delay everyone's pay.</p></details>
+      <label class="done-toggle"><input type="checkbox" id="done-s7" data-done="s7"> I understand this step</label>
+    </section>
+
+    <!-- 08 -->
+    <section class="step" id="s8" data-title="Strategy pattern">
+      <div class="step-head"><span class="num">STEP 08</span><h2>The Strategy pattern holding it together</h2></div>
+      <p class="lead">Every algorithm is a <b>strategy</b> with the same interface, and the app only ever talks to a
+        <b>context</b> object. Endpoints never know which algorithm is behind a limit.</p>
+      <div class="table-wrap"><table>
+        <tr><th>Role</th><th>Class</th><th>Job</th></tr>
+        <tr><td>Strategy interface</td><td><code>RateLimitStrategy</code></td><td>Defines <code>acquire</code>, <code>peek</code>, <code>reset</code>, <code>describe</code>.</td></tr>
+        <tr><td>Concrete strategies</td><td><code>TokenBucket</code>, <code>SlidingWindowLog</code>, <code>FixedWindow</code>, <code>LeakyBucket</code> (+ Redis versions)</td><td>Each implements only its own maths in <code>_evaluate</code>.</td></tr>
+        <tr><td>Context</td><td><code>RateLimiter</code></td><td>Holds a strategy, names its keys, can swap strategy with <code>set_strategy()</code>.</td></tr>
+        <tr><td>Factory</td><td><code>create_strategy()</code></td><td>Builds a strategy from config: <code>("sliding_window", {"limit": 5, "window": 60})</code>.</td></tr>
+      </table></div>
+      <h3>A detail worth mentioning: acquire and peek share one method</h3>
+      <p>The base class implements <code>acquire()</code> (use it up) and <code>peek()</code> (just look) once. Both take the
+        lock and call the abstract <code>_evaluate(key, cost, consume)</code>, with <code>consume</code> true or false. Each
+        algorithm writes its maths once and gets both for free. This is the <i>template method</i> pattern inside the strategy pattern.</p>
+      <p><code>peek()</code> powers <code>GET /v1/limits</code>, which shows the live state of every limiter without using
+        anything up. It's what the dashboard's live meters poll every second.</p>
+      <div class="callout decision"><div class="label">Decision</div>
+        <p>Policies are <b>data, not code</b>. Changing which algorithm protects something is a one-line edit in
+          <code>policies.py</code>. The payoff showed up later: moving every limiter to Redis needed new strategy classes
+          and a factory option, and <b>no endpoint code changed at all</b>.</p></div>
+      <p class="where">Where: <a href="https://github.com/udaydaroch/rateLimitProject/tree/main/app/ratelimit">app/ratelimit/</a> (base.py, limiter.py, factory.py)</p>
+      <details class="check"><summary>Check yourself: what would you change to give the free plan a 20-token burst?</summary>
+        <p>Only the <code>Plan</code> entry in <code>policies.py</code> (<code>burst=20</code>). The factory builds the bucket from it;
+          nothing else needs to know.</p></details>
+      <label class="done-toggle"><input type="checkbox" id="done-s8" data-done="s8"> I understand this step</label>
+    </section>
+
+    <!-- 09 -->
+    <section class="step" id="s9" data-title="Life of a request">
+      <div class="step-head"><span class="num">STEP 09</span><h2>The life of one request</h2></div>
+      <p class="lead">Follow a transfer request through the code. The order of the checks is itself a set of decisions.</p>
+      <div class="diagram"><pre class="mermaid">
+flowchart TD
+  A[Request arrives] --> B{"IP locked out?<br/>(fixed window)"}
+  B -- yes --> X1[429]
+  B -- no --> C{"API key valid?"}
+  C -- no --> X2["401 + count a failure for this IP"]
+  C -- yes --> D{"Token left?<br/>(token bucket)"}
+  D -- no --> X3[429]
+  D -- yes --> E{"Daily quota left?<br/>(fixed window)"}
+  E -- "no, free plan" --> X4[429]
+  E -- yes --> F{"Idempotency key<br/>seen before?"}
+  F -- "yes, finished" --> R["Replay stored answer"]
+  F -- new --> G["Validate accounts"]
+  G --> H{"Transfer limit?<br/>(sliding window)"}
+  H -- no --> X5[429]
+  H -- yes --> I["Move money + save answer<br/>(one transaction)"]
+  I --> J["Middleware: add headers,<br/>record usage"]
+      </pre></div>
+      <ol class="list">
+        <li><b>Auth</b> (<code>authenticate</code>): checks the IP lockout first, then the key. Wrong keys count against the IP.</li>
+        <li><b>General limits</b> (<code>metered_client</code>): token bucket per key, then daily quota per customer.</li>
+        <li><b>Idempotency check</b> before anything else, so a retry gets the stored answer and <i>doesn't</i> count against the transfer limit again.</li>
+        <li><b>Validation before the fraud limit</b>, so a typo in an account number doesn't use up one of your 5 transfers.</li>
+        <li><b>The money moves</b> inside a database transaction.</li>
+        <li><b>Middleware</b> runs around everything: it adds the <code>RateLimit-*</code> headers and writes one usage record, including for 429s.</li>
+      </ol>
+      <p>Every response carries headers so a client knows where it stands:</p>
+      <pre class="code">RateLimit-Policy: token_bucket      # which limit is closest to blocking you
+RateLimit-Limit: 10
+RateLimit-Remaining: 9
+RateLimit-Reset: 1                  # seconds until fully replenished
+Retry-After: 1                      # only on 429</pre>
+      <p class="where">Where: <a href="https://github.com/udaydaroch/rateLimitProject/blob/main/app/deps.py">app/deps.py</a> ·
+        <a href="https://github.com/udaydaroch/rateLimitProject/blob/main/app/middleware.py">app/middleware.py</a></p>
+      <details class="check"><summary>Check yourself: why is the middleware a raw ASGI middleware instead of a normal FastAPI one?</summary>
+        <p>It has to see the <i>final</i> status code, including 429s raised inside dependencies, and change response headers as
+          they're sent. Wrapping the ASGI <code>send</code> function gives exactly that, and it reads the decisions the limiters left on <code>request.state</code>.</p></details>
+      <label class="done-toggle"><input type="checkbox" id="done-s9" data-done="s9"> I understand this step</label>
+    </section>
+
+    <!-- 10 -->
+    <section class="step" id="s10" data-title="API keys and hashing">
+      <div class="step-head"><span class="num">STEP 10</span><h2>API keys: generated once, stored only as a hash</h2></div>
+      <p class="lead">A key looks like <code>bk_live_RKcNm7pO_bTfDdWR7dcj7Qqj7cc6gkfMqef0zz2QX</code>: a public 8-character
+        <b>prefix</b> and a 32-character <b>secret</b>.</p>
+      <ul>
+        <li>The database stores the prefix (to find the row quickly) and <code>HMAC-SHA256(pepper, secret)</code>. Never the secret.</li>
+        <li>The full key is shown <b>once</b>, at signup. If it's lost, you make a new one.</li>
+        <li>Checking a key uses a <b>constant-time comparison</b>, so response timing can't reveal how close a guess was.</li>
+        <li>The <b>pepper</b> is a secret kept in an environment variable, not the database, so a leaked database dump alone can't be used to test guesses.</li>
+      </ul>
+      <div class="callout decision"><div class="label">Decision: why not bcrypt like passwords?</div>
+        <p>Passwords are short and guessable, so they need a deliberately slow hash. API keys are 32 random characters
+          (about 190 bits), which can't be brute-forced however fast the hash is. A fast keyed hash keeps every request's auth check cheap.</p></div>
+      <p class="where">Where: <a href="https://github.com/udaydaroch/rateLimitProject/blob/main/app/security.py">app/security.py</a></p>
+      <details class="check"><summary>Check yourself: why have a prefix at all?</summary>
+        <p>Without it you'd have to hash the incoming secret and compare it against every key. The prefix is an indexed
+          lookup that finds the one row to check, and it's safe to show in the dashboard (<code>bk_live_RKcNm7pO_…</code>) so people can tell keys apart.</p></details>
+      <label class="done-toggle"><input type="checkbox" id="done-s10" data-done="s10"> I understand this step</label>
+    </section>
+
+    <!-- 11 -->
+    <section class="step" id="s11" data-title="Idempotency keys">
+      <div class="step-head"><span class="num">STEP 11</span><h2>Idempotency keys: retries never pay twice</h2></div>
+      <p class="lead">A phone sends a transfer, the connection drops before the answer arrives, and the app retries. Did the
+        first one go through? Without protection, the retry could move the money a second time.</p>
+      <p>Money-moving endpoints require an <code>Idempotency-Key</code> header (any unique string, usually a UUID). The bank remembers each key:</p>
+      <div class="table-wrap"><table>
+        <tr><th>Situation</th><th>Response</th></tr>
+        <tr><td>New key</td><td>Run the transfer, store the answer under the key</td></tr>
+        <tr><td>Same key, same body, finished</td><td><span class="pill warn">replay</span> the stored answer, header <code>Idempotent-Replayed: true</code></td></tr>
+        <tr><td>Same key, first request still running</td><td><span class="pill bad">409</span> request in progress</td></tr>
+        <tr><td>Same key, <i>different</i> body</td><td><span class="pill bad">422</span> the client has a bug</td></tr>
+        <tr><td>First attempt was rate limited (429) or crashed (5xx)</td><td>Key is released, so the client can retry with the same key</td></tr>
+      </table></div>
+      <div class="callout decision"><div class="label">Decision: one transaction</div>
+        <p>The money movement and the stored answer are saved in the <b>same database transaction</b>. Either both happen or
+          neither does, so a crash can never leave "money moved, but key not marked done".</p></div>
+      <p>Two clean-up rules: keys expire after 24 hours, and an "in progress" marker older than 60 seconds is assumed to belong to a crashed request and can be taken over.</p>
+      <p class="where">Where: <a href="https://github.com/udaydaroch/rateLimitProject/blob/main/app/idempotency.py">app/idempotency.py</a></p>
+      <details class="check"><summary>Check yourself: why is a 429 not stored as the key's final answer?</summary>
+        <p>Being rate limited isn't a real outcome of the transfer; it just means "not now". If it were stored, every retry with
+          that key would replay the 429 forever and the transfer could never happen.</p></details>
+      <label class="done-toggle"><input type="checkbox" id="done-s11" data-done="s11"> I understand this step</label>
+    </section>
+
+    <!-- 12 -->
+    <section class="step" id="s12" data-title="Money safety">
+      <div class="step-head"><span class="num">STEP 12</span><h2>Keeping the money correct</h2></div>
+      <ul>
+        <li><b>Integer cents everywhere.</b> <code>2500</code> means $25.00. Floating point can't represent 0.10 exactly, which is unacceptable for money.</li>
+        <li><b>A database rule</b>: <code>CHECK (balance_cents &gt;= 0)</code>. Even buggy code can't make a balance negative.</li>
+        <li><b>An atomic debit.</b> The check and the subtraction are one statement:</li>
+      </ul>
+      <pre class="code">UPDATE accounts
+   SET balance_cents = balance_cents - :amount
+ WHERE id = :account AND balance_cents &gt;= :amount
+-- 0 rows changed  →  insufficient funds</pre>
+      <div class="callout bug"><div class="label">The bug this prevents</div>
+        <p>The naive version reads the balance, checks it in Python, then writes. Two transfers arriving at the same moment both read
+          $100, both pass a $80 check, and the account is overdrawn. In one statement, the database handles the two updates one after the other, so the second one sees $20 and fails.</p></div>
+      <p class="where">Where: <code>_debit</code> in <a href="https://github.com/udaydaroch/rateLimitProject/blob/main/app/main.py">app/main.py</a></p>
+      <details class="check"><summary>Check yourself: what is a race condition, in one sentence?</summary>
+        <p>A bug where the result depends on the exact timing of two things happening at once, such as two requests reading the same value before either writes.</p></details>
+      <label class="done-toggle"><input type="checkbox" id="done-s12" data-done="s12"> I understand this step</label>
+    </section>
+
+    <!-- 13 -->
+    <section class="step" id="s13" data-title="Cursor pagination">
+      <div class="step-head"><span class="num">STEP 13</span><h2>Cursor pagination for transaction history</h2></div>
+      <p class="lead">Transaction lists come back 20 at a time with a <code>next_cursor</code>. The next request passes it back
+        to get the following page.</p>
+      <p>The cursor is an opaque, base64-encoded "last id you saw". The query is <code>WHERE id &lt; :cursor ORDER BY id DESC LIMIT 21</code>.
+        Asking for one extra row is how the API knows whether <code>has_more</code> is true.</p>
+      <div class="callout decision"><div class="label">Decision: why not <code>?page=3</code>?</div>
+        <p>A ledger is written to constantly. With page numbers, each new transaction shifts every page by one, so clients skip
+          or see rows twice. Offsets also get slower the deeper you go (<code>OFFSET 40000</code> scans 40,000 rows). A cursor is stable and uses the index, so page 1,000 is as fast as page 1.</p></div>
+      <p class="where">Where: <a href="https://github.com/udaydaroch/rateLimitProject/blob/main/app/pagination.py">app/pagination.py</a></p>
+      <details class="check"><summary>Check yourself: why make the cursor opaque instead of just <code>?after_id=59</code>?</summary>
+        <p>It keeps the format private, so the server can later change what's inside (say, sort by date plus id) without breaking clients.</p></details>
+      <label class="done-toggle"><input type="checkbox" id="done-s13" data-done="s13"> I understand this step</label>
+    </section>
+
+    <!-- 14 -->
+    <section class="step" id="s14" data-title="Metering and billing">
+      <div class="step-head"><span class="num">STEP 14</span><h2>Usage metering and billing</h2></div>
+      <p class="lead">Every authenticated call writes one row to <code>usage_events</code>: which key, which endpoint, the status code, whether it's billable, and the UTC day.</p>
+      <ul>
+        <li><b>Billable</b> means status below 400. Blocked (429) calls are recorded so you can see them, but never charged.</li>
+        <li><code>GET /v1/usage</code> turns the rows into: calls today, calls per day, calls per endpoint, and a bill estimate.</li>
+        <li>Pro plan pricing: $0.40 per 1,000 calls within the quota, $0.80 per 1,000 over it.</li>
+      </ul>
+      <div class="callout bug"><div class="label">A bug found while testing</div>
+        <p>At first, the dashboard's own <code>/v1/usage</code> call also went through the token bucket. After the burst demo emptied
+          the bucket, the dashboard couldn't even load your usage to show you why. Fix: <b>management endpoints</b>
+          (<code>/v1/usage</code>, <code>/v1/keys</code>, <code>/v1/limits</code>) need a valid key but aren't rate limited or billed, just as a provider's own dashboard doesn't use up your API limits.</p></div>
+      <p class="where">Where: <a href="https://github.com/udaydaroch/rateLimitProject/blob/main/app/metering.py">app/metering.py</a> ·
+        <code>management_client</code> in <a href="https://github.com/udaydaroch/rateLimitProject/blob/main/app/deps.py">app/deps.py</a></p>
+      <details class="check"><summary>Check yourself: why store the UTC day as its own column?</summary>
+        <p>Grouping by day is then plain SQL that works the same on SQLite and Postgres, with no database-specific date functions.</p></details>
+      <label class="done-toggle"><input type="checkbox" id="done-s14" data-done="s14"> I understand this step</label>
+    </section>
+
+    <!-- 15 -->
+    <section class="step" id="s15" data-title="Going live">
+      <div class="step-head"><span class="num">STEP 15</span><h2>Going live: the bugs that only appeared in production</h2></div>
+      <p class="lead">This is the best interview story in the project. Everything passed locally; production found three real problems.</p>
+
+      <div class="callout bug"><div class="label">Bug 1: every page returned 404</div>
+        <p>The config had an old-style rule rewriting every path to <code>/api/index</code>. Vercel now detects FastAPI itself, so
+          the app received <code>/api/index</code> for every request. The clue was that the 404 body was FastAPI's own
+          <code>{"detail": "Not Found"}</code>, so the app <i>was</i> running but seeing the wrong path. Fix: delete the rewrite.</p></div>
+
+      <div class="callout bug"><div class="label">Bug 2: random 401s for valid keys</div>
+        <p>The first version kept the database in each server's <code>/tmp</code> folder and the limiters in memory. Vercel runs
+          <b>many short-lived instances</b>. In a live test, requests 1–9 worked and request 10 got 401: it had landed on a second
+          instance where the key didn't exist. Rate limits were also per instance, so they weren't really enforced.</p></div>
+      <div class="callout decision"><div class="label">Fix: move shared state out of the server</div>
+        <p>Customers, keys and the ledger moved to <b>Postgres</b>; limiter state moved to <b>Redis</b>. Thanks to the Strategy
+          pattern, Redis meant four new strategy classes and a factory option; no endpoint changed.</p></div>
+
+      <h3>Why Redis needs Lua scripts</h3>
+      <p>With many instances, two can read "1 token left" at the same moment and both spend it. Each Redis strategy sends its
+        whole read-decide-write as one <b>Lua script</b>, which Redis runs as a single uninterruptible step:</p>
+      <pre class="code">local tokens = tonumber(redis.call('HGET', key, 'tokens')) or capacity
+tokens = math.min(capacity, tokens + elapsed * rate)
+local allowed = tokens &gt;= 1
+if allowed then tokens = tokens - 1 end
+redis.call('HSET', key, 'tokens', tostring(tokens), 'ts', tostring(now))
+redis.call('PEXPIRE', key, ttl)          -- idle keys delete themselves</pre>
+      <p>Details: numbers come back as strings because Redis would cut decimals off Lua numbers; every key has an expiry so
+        unused ones clean themselves up; <code>max(0, now - last)</code> guards against small clock differences between servers.</p>
+
+      <div class="callout bug"><div class="label">Bug 3: locked out of signing up</div>
+        <p>The dashboard pre-filled one email per page load. Each extra click on "Sign up" got a 409 "email taken", but each
+          attempt still used one of the 10 signups allowed per IP per hour. Fix: check for an existing email <i>before</i>
+          taking a signup slot, and give the form a fresh email after each signup.</p></div>
+
+      <h3>Other serverless details</h3>
+      <ul>
+        <li><b>Real client IP</b>: behind Vercel's proxy every request appears to come from the proxy, so per-IP limits read
+          <code>X-Forwarded-For</code>, trusted <i>only</i> when running on Vercel so nobody can fake their IP locally.</li>
+        <li><b>Connection pool</b>: each instance keeps up to 4 Postgres connections, with prepared statements turned off as Neon's PgBouncer requires.</li>
+        <li><b>Schema setup</b> runs on first use behind a Postgres advisory lock, so two cold-starting instances don't race on <code>CREATE TABLE</code>.</li>
+      </ul>
+      <p class="where">Where: <a href="https://github.com/udaydaroch/rateLimitProject/blob/main/app/ratelimit/redis_strategies.py">app/ratelimit/redis_strategies.py</a> ·
+        <a href="https://github.com/udaydaroch/rateLimitProject/blob/main/app/db.py">app/db.py</a></p>
+      <details class="check"><summary>Check yourself: why didn't the 401 bug show up in local testing?</summary>
+        <p>Locally there's only ever one process, so memory and the SQLite file are always shared. The bug only exists when
+          requests are spread across several separate instances, which is the normal situation on serverless hosting.</p></details>
+      <label class="done-toggle"><input type="checkbox" id="done-s15" data-done="s15"> I understand this step</label>
+    </section>
+
+    <!-- 16 -->
+    <section class="step" id="s16" data-title="Testing">
+      <div class="step-head"><span class="num">STEP 16</span><h2>How it's tested</h2></div>
+      <ul>
+        <li><b>A fake clock.</b> Every strategy takes a <code>clock</code> function. Tests pass one they control and call
+          <code>clock.advance(1.5)</code>, so time-based behaviour is tested exactly and instantly, with no <code>sleep()</code>.</li>
+        <li><b>Both backends, same tests.</b> Every algorithm test runs twice: in-memory and Redis (using <code>fakeredis</code>, which can run Lua).
+          The whole API suite also runs twice. That guarantees the two implementations can't drift apart.</li>
+        <li><b>A cross-instance test</b>: two strategy objects on one Redis share a bucket of 3, and the 4th request between them is blocked.</li>
+        <li><b>Real Postgres option</b>: <code>TEST_DATABASE_URL=… pytest</code> runs the API tests against Postgres, each in a throwaway schema.</li>
+        <li><b>Live checks</b> after each deploy: signup, 40 simultaneous requests (zero 401s), each algorithm, idempotency, pagination and usage.</li>
+      </ul>
+      <p>67 tests, about 2 seconds locally.</p>
+      <div class="callout tradeoff"><div class="label">A lesson about test results</div>
+        <p>Running the API tests against the real database from New Zealand gave 4 failures, but they were false alarms. Each request
+          took about a second to reach Washington, so the token bucket refilled between requests and the expected 429s never came.
+          Time-based tests depend on fast requests; the same checks passed from inside Vercel's region.</p></div>
+      <p class="where">Where: <a href="https://github.com/udaydaroch/rateLimitProject/tree/main/tests">tests/</a></p>
+      <details class="check"><summary>Check yourself: why inject a clock instead of calling <code>time.time()</code> directly?</summary>
+        <p>So tests control time. Otherwise testing "refills after 60 seconds" would mean really waiting 60 seconds, and results would vary with machine speed.</p></details>
+      <label class="done-toggle"><input type="checkbox" id="done-s16" data-done="s16"> I understand this step</label>
+    </section>
+
+    <!-- 17 -->
+    <section class="step" id="s17" data-title="Limits and interview prep">
+      <div class="step-head"><span class="num">STEP 17</span><h2>Known limitations, next steps and interview questions</h2></div>
+      <h3>Limitations to name before someone else does</h3>
+      <ul>
+        <li><b>If Redis is down</b>, requests fail with a 500. A real system must choose: fail open (allow everything) for reads,
+          fail closed (block) for money movement.</li>
+        <li><b>Payouts aren't really sent</b>; there's no background worker or payment network.</li>
+        <li><b>One database write per request</b> for metering. At scale you'd batch them or send them to a queue.</li>
+        <li><b>Per-IP limits hit shared networks</b>: an office or university behind one IP shares the 10 signups an hour.</li>
+        <li><b>The sliding window log uses memory per request</b>; a high limit would need the counter variant.</li>
+      </ul>
+      <h3>Likely interview questions</h3>
+      <details class="check"><summary>"Which rate limiting algorithm is best?"</summary>
+        <p>None; it depends on the job. Token bucket for bursty clients, sliding window when the limit must be exact, fixed window
+          when the reset must be predictable or cheap, leaky bucket when a downstream system needs a steady rate. My project uses all four for that reason.</p></details>
+      <details class="check"><summary>"How do you rate limit across many servers?"</summary>
+        <p>Keep the state in a shared store like Redis and make each check atomic. I run each algorithm as a Lua script so the
+          read, decision and write can't interleave between servers. I found this the hard way when in-memory limits failed on Vercel.</p></details>
+      <details class="check"><summary>"What happens if a client retries a payment?"</summary>
+        <p>The Idempotency-Key header. The first request's answer is stored in the same transaction as the money movement; a
+          retry with the same key gets that stored answer and money moves once.</p></details>
+      <details class="check"><summary>"How do you store API keys?"</summary>
+        <p>A public prefix for lookup and an HMAC-SHA256 of the secret with a server-side pepper, compared in constant time. Shown
+          once at creation. A fast hash is fine because the keys are long and random, unlike passwords.</p></details>
+      <details class="check"><summary>"Why the Strategy pattern?"</summary>
+        <p>Every algorithm has the same interface, so policies are config and algorithms can be swapped. It proved itself when I
+          moved to Redis: new strategy classes plus a factory option, and no endpoint changed.</p></details>
+      <details class="check"><summary>"What would you do differently?"</summary>
+        <p>Design for multiple instances from the start, decide fail-open vs fail-closed per endpoint, add a real worker for
+          payouts, and batch the usage writes.</p></details>
+      <label class="done-toggle"><input type="checkbox" id="done-s17" data-done="s17"> I understand this step</label>
+    </section>
+  </article>
+</div>
+
+<script>
+  const steps = [...document.querySelectorAll("section.step")];
+  const list = document.getElementById("indexList");
+  steps.forEach((s, i) => {
+    const li = document.createElement("li");
+    li.innerHTML = `<a href="#${s.id}" data-for="${s.id}"><span class="n">${String(i + 1).padStart(2, "0")}</span><span></span></a>`;
+    li.querySelector("span:last-child").textContent = s.dataset.title;
+    list.appendChild(li);
+  });
+
+  const load = () => { try { return JSON.parse(localStorage.getItem("ledgerline-guide-done") || "{}"); } catch { return {}; } };
+  const save = (v) => { try { localStorage.setItem("ledgerline-guide-done", JSON.stringify(v)); } catch {} };
+  let done = load();
+
+  function render() {
+    const count = steps.filter((s) => done[s.id]).length;
+    document.getElementById("progressText").textContent = `${count} of ${steps.length} steps understood`;
+    document.getElementById("progressBar").style.width = `${(count / steps.length) * 100}%`;
+    document.querySelectorAll("nav.index a").forEach((a) => a.classList.toggle("done", !!done[a.dataset.for]));
+    document.querySelectorAll("[data-done]").forEach((cb) => { cb.checked = !!done[cb.dataset.done]; });
+  }
+  document.addEventListener("change", (e) => {
+    const id = e.target.dataset && e.target.dataset.done;
+    if (!id) return;
+    done[id] = e.target.checked;
+    save(done);
+    render();
+  });
+  render();
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+<script>
+  const dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+  mermaid.initialize({ startOnLoad: true, theme: dark ? "dark" : "neutral", securityLevel: "strict" });
+</script>
+</body>
+</html>

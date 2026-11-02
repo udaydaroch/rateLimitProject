@@ -90,6 +90,8 @@
     <p class="muted">Ledgerline is a pretend bank with a public API. Like a real bank, it can't let anyone send
       unlimited requests, so it uses <b>four different rate limiting rules</b>, each suited to a different job.
       Press the buttons below and watch each rule react in real time. All money here is fake.</p>
+    <p class="small" style="margin-top:8px">Want to know how it works?
+      <a href="/guide">Read the step-by-step guide</a>.</p>
   </header>
 
   <!-- Step 1: key -->
@@ -205,7 +207,8 @@
     <details class="card">
       <summary>For developers</summary>
       <div style="display:grid;gap:10px">
-        <p class="small">Call the API yourself in the <a href="/docs" target="_blank">interactive docs</a>
+        <p class="small">Learn how it all works in the <a href="/guide">step-by-step guide</a>.
+          Call the API yourself in the <a href="/docs" target="_blank">interactive docs</a>
           (click <b>Authorize</b> and paste your key), or read how everything works in the
           <a href="https://github.com/udaydaroch/rateLimitProject#readme" target="_blank">README</a>.
           The meters on this page come from <code>GET /v1/limits</code>, which reads each limiter without using it up.</p>

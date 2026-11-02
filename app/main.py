@@ -35,7 +35,8 @@ A sandbox banking API that demonstrates four rate limiting algorithms.
 
 Everything here is sandbox money. Data lives in Postgres and limiter state in
 Redis, so limits hold across every serverless instance.
-The visual dashboard is at [/dashboard](/dashboard).
+The visual dashboard is at [/dashboard](/dashboard), and a step-by-step guide to how
+everything works is at [/guide](/guide).
 """
 
 app = FastAPI(title="Ledgerline Bank API", version="1.0.0", description=DESCRIPTION)
@@ -384,3 +385,8 @@ def root():
 @app.get("/dashboard", include_in_schema=False)
 def dashboard():
     return FileResponse(STATIC / "dashboard.html")
+
+
+@app.get("/guide", include_in_schema=False)
+def guide():
+    return FileResponse(STATIC / "guide.html")
