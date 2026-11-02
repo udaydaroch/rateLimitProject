@@ -140,7 +140,7 @@
     <header class="top">
       <div class="eyebrow">Ledgerline · study guide · <a href="/dashboard">try the live dashboard</a></div>
       <h1>Understand the whole project, one step at a time</h1>
-      <p>This guide walks through the rate-limited banking API in the order you'd explain it in an interview:
+      <p>This guide walks through the rate-limited banking API one step at a time:
         the problem, the four algorithms, how a request moves through the code, the safety features, and what went wrong
         when it went live. Every step names the decision, why it was made, what it costs, and where it lives in the code.
         Tick a step off once you could explain it without notes.</p>
@@ -522,7 +522,7 @@ Retry-After: 1                      # only on 429</pre>
     <!-- 15 -->
     <section class="step" id="s15" data-title="Going live">
       <div class="step-head"><span class="num">STEP 15</span><h2>Going live: the bugs that only appeared in production</h2></div>
-      <p class="lead">This is the best interview story in the project. Everything passed locally; production found three real problems.</p>
+      <p class="lead">Everything passed locally; production found three real problems.</p>
 
       <div class="callout bug"><div class="label">Bug 1: every page returned 404</div>
         <p>The config had an old-style rule rewriting every path to <code>/api/index</code>. Vercel now detects FastAPI itself, so
@@ -593,9 +593,9 @@ redis.call('PEXPIRE', key, ttl)          -- idle keys delete themselves</pre>
     </section>
 
     <!-- 17 -->
-    <section class="step" id="s17" data-title="Limits and interview prep">
-      <div class="step-head"><span class="num">STEP 17</span><h2>Known limitations, next steps and interview questions</h2></div>
-      <h3>Limitations to name before someone else does</h3>
+    <section class="step" id="s17" data-title="Limitations and next steps">
+      <div class="step-head"><span class="num">STEP 17</span><h2>Known limitations and next steps</h2></div>
+      <h3>Limitations</h3>
       <ul>
         <li><b>If Redis is down</b>, requests fail with a 500. A real system must choose: fail open (allow everything) for reads,
           fail closed (block) for money movement.</li>
@@ -604,25 +604,13 @@ redis.call('PEXPIRE', key, ttl)          -- idle keys delete themselves</pre>
         <li><b>Per-IP limits hit shared networks</b>: an office or university behind one IP shares the 10 signups an hour.</li>
         <li><b>The sliding window log uses memory per request</b>; a high limit would need the counter variant.</li>
       </ul>
-      <h3>Likely interview questions</h3>
-      <details class="check"><summary>"Which rate limiting algorithm is best?"</summary>
-        <p>None; it depends on the job. Token bucket for bursty clients, sliding window when the limit must be exact, fixed window
-          when the reset must be predictable or cheap, leaky bucket when a downstream system needs a steady rate. My project uses all four for that reason.</p></details>
-      <details class="check"><summary>"How do you rate limit across many servers?"</summary>
-        <p>Keep the state in a shared store like Redis and make each check atomic. I run each algorithm as a Lua script so the
-          read, decision and write can't interleave between servers. I found this the hard way when in-memory limits failed on Vercel.</p></details>
-      <details class="check"><summary>"What happens if a client retries a payment?"</summary>
-        <p>The Idempotency-Key header. The first request's answer is stored in the same transaction as the money movement; a
-          retry with the same key gets that stored answer and money moves once.</p></details>
-      <details class="check"><summary>"How do you store API keys?"</summary>
-        <p>A public prefix for lookup and an HMAC-SHA256 of the secret with a server-side pepper, compared in constant time. Shown
-          once at creation. A fast hash is fine because the keys are long and random, unlike passwords.</p></details>
-      <details class="check"><summary>"Why the Strategy pattern?"</summary>
-        <p>Every algorithm has the same interface, so policies are config and algorithms can be swapped. It proved itself when I
-          moved to Redis: new strategy classes plus a factory option, and no endpoint changed.</p></details>
-      <details class="check"><summary>"What would you do differently?"</summary>
-        <p>Design for multiple instances from the start, decide fail-open vs fail-closed per endpoint, add a real worker for
-          payouts, and batch the usage writes.</p></details>
+      <h3>Next steps</h3>
+      <ul>
+        <li>Decide fail-open or fail-closed per endpoint for when Redis is unavailable.</li>
+        <li>Add a real background worker that sends queued payouts.</li>
+        <li>Batch the usage writes instead of one database write per request.</li>
+        <li>Design for multiple instances from the start next time.</li>
+      </ul>
       <label class="done-toggle"><input type="checkbox" id="done-s17" data-done="s17"> I understand this step</label>
     </section>
   </article>
