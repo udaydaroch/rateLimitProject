@@ -3,172 +3,234 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Ledgerline Developer Dashboard</title>
+<title>Ledgerline Rate Limit Lab</title>
 <style>
   :root {
-    --bg: #f6f7f9; --card: #ffffff; --text: #16191f; --muted: #5d6573; --border: #e1e4ea;
-    --accent: #1f5eff; --ok: #138a52; --warn: #b26b00; --bad: #c62828; --bar: #1f5eff; --bar-bad: #e05252;
+    --bg: #f5f6f8; --card: #ffffff; --text: #15181d; --muted: #5b6370; --border: #e0e3e8;
+    --accent: #2156e8; --accent-soft: #e8eefd;
+    --ok: #12804d; --ok-soft: #dff3e8; --wait: #a86400; --wait-soft: #fbefd9;
+    --bad: #c42b2b; --bad-soft: #fbe3e3; --empty: #e6e8ec;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #0f1216; --card: #171b21; --text: #e8eaee; --muted: #9aa3b2; --border: #2a303a;
-      --accent: #6c95ff; --ok: #43c486; --warn: #e3a33b; --bad: #ff6b6b; --bar: #6c95ff; --bar-bad: #ff6b6b;
+      --bg: #0f1115; --card: #171a20; --text: #e9ebef; --muted: #9aa2af; --border: #2a2f38;
+      --accent: #7097ff; --accent-soft: #1d2740;
+      --ok: #44c486; --ok-soft: #15301f; --wait: #e8a640; --wait-soft: #35280f;
+      --bad: #ff6e6e; --bad-soft: #3a1717; --empty: #2a2f38;
     }
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text);
-         font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-  header { padding: 20px 16px; border-bottom: 1px solid var(--border); background: var(--card); }
-  header h1 { margin: 0; font-size: 18px; }
-  header p { margin: 2px 0 0; color: var(--muted); }
-  main { max-width: 1100px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; }
-  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
-  .card h2 { margin: 0 0 12px; font-size: 15px; }
-  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-  input, select { font: inherit; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px;
-                  background: var(--bg); color: var(--text); min-width: 0; }
-  input.key { flex: 1 1 320px; font-family: ui-monospace, Menlo, monospace; }
-  button { font: inherit; padding: 8px 14px; border-radius: 6px; border: 1px solid var(--accent);
-           background: var(--accent); color: #fff; cursor: pointer; }
-  button.secondary { background: transparent; color: var(--accent); }
+         font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 32px 16px 64px; display: grid; gap: 20px; }
+  h1 { font-size: 26px; margin: 0 0 6px; }
+  h2 { font-size: 18px; margin: 0; }
+  p { margin: 0; }
+  .muted { color: var(--muted); }
+  .small { font-size: 13px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; display: grid; gap: 12px; }
+  .step { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%;
+          background: var(--accent); color: #fff; font-size: 13px; font-weight: 600; margin-right: 8px; vertical-align: 2px; }
+  button { font: inherit; font-weight: 500; padding: 9px 16px; border-radius: 8px; border: 1px solid var(--accent);
+           background: var(--accent); color: #fff; cursor: pointer; justify-self: start; }
+  button.ghost { background: transparent; color: var(--accent); }
   button:disabled { opacity: .5; cursor: default; }
-  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
-  .stat { border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
-  .stat .label { color: var(--muted); font-size: 12px; }
-  .stat .value { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
-  .meter { height: 6px; background: var(--border); border-radius: 3px; margin-top: 8px; overflow: hidden; }
-  .meter > div { height: 100%; background: var(--accent); }
-  .chart { display: flex; align-items: flex-end; gap: 4px; height: 140px; padding-top: 8px; }
-  .chart .col { flex: 1; display: flex; flex-direction: column-reverse; min-width: 0; height: 100%; }
-  .chart .ok { background: var(--bar); border-radius: 2px 2px 0 0; }
-  .chart .bad { background: var(--bar-bad); }
-  .chart-labels { display: flex; gap: 4px; font-size: 10px; color: var(--muted); }
-  .chart-labels span { flex: 1; text-align: center; min-width: 0; overflow: hidden; }
-  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); margin-top: 6px; }
-  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
-  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
-  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
-  th { color: var(--muted); font-weight: 500; font-size: 12px; }
-  .table-wrap { overflow-x: auto; }
-  code, .mono { font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
-  .lab { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
-  .lab .test { border: 1px solid var(--border); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
-  .lab .test h3 { margin: 0; font-size: 14px; }
-  .lab .test p { margin: 0; color: var(--muted); font-size: 12px; flex: 1; }
-  .dots { display: flex; flex-wrap: wrap; gap: 3px; min-height: 12px; }
-  .dots span { width: 10px; height: 10px; border-radius: 2px; background: var(--ok); }
-  .dots span.r { background: var(--bad); }
-  .dots span.q { background: var(--warn); }
-  .result { font-size: 12px; color: var(--muted); min-height: 18px; }
-  .notice { padding: 10px 12px; border-radius: 6px; background: var(--bg); border: 1px dashed var(--border);
-            word-break: break-all; }
+  input { font: inherit; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg);
+          color: var(--text); width: 100%; font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
+  code { font-family: ui-monospace, Menlo, monospace; font-size: 13px; background: var(--bg); padding: 2px 6px;
+         border-radius: 4px; word-break: break-all; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   .hidden { display: none !important; }
-  .error { color: var(--bad); }
+
+  .tag { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft);
+         color: var(--accent); margin-left: 8px; vertical-align: 2px; white-space: nowrap; }
+  .rule { font-size: 16px; }
+  .why { font-size: 13px; color: var(--muted); border-left: 3px solid var(--border); padding-left: 10px; }
+
+  /* live meter: a row of slots */
+  .meter { display: grid; gap: 6px; padding: 12px; background: var(--bg); border-radius: 10px; }
+  .meter-label { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; flex-wrap: wrap; }
+  .meter-label b { font-variant-numeric: tabular-nums; }
+  .slots { display: flex; gap: 4px; flex-wrap: wrap; }
+  .slots span { width: 22px; height: 22px; border-radius: 5px; background: var(--empty); transition: background .3s; }
+  .slots span.on { background: var(--accent); }
+  .slots span.wait { background: var(--wait); }
+  .bar { height: 10px; border-radius: 5px; background: var(--empty); overflow: hidden; }
+  .bar > div { height: 100%; background: var(--accent); transition: width .3s; }
+
+  /* request results */
+  .reqs { display: flex; gap: 4px; flex-wrap: wrap; }
+  .reqs span { min-width: 30px; height: 28px; padding: 0 6px; border-radius: 6px; font-size: 12px; font-weight: 600;
+               display: inline-flex; align-items: center; justify-content: center; font-variant-numeric: tabular-nums; }
+  .reqs .ok { background: var(--ok-soft); color: var(--ok); }
+  .reqs .wait { background: var(--wait-soft); color: var(--wait); }
+  .reqs .bad { background: var(--bad-soft); color: var(--bad); }
+  .reqs .pending { background: var(--empty); color: var(--muted); }
+  .result { font-size: 14px; }
+  .result:empty { display: none; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+  .stat { background: var(--bg); border-radius: 10px; padding: 12px; }
+  .stat .v { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .stat .l { font-size: 13px; color: var(--muted); }
+
+  details summary { cursor: pointer; color: var(--muted); font-size: 14px; }
+  details[open] summary { margin-bottom: 10px; }
+  .error { color: var(--bad); font-size: 14px; }
+  .error:empty { display: none; }
+  a { color: var(--accent); }
 </style>
 </head>
 <body>
-<header>
-  <h1>Ledgerline Developer Dashboard</h1>
-  <p>API keys, rate limits and metered usage for the Ledgerline banking API. · <a href="/docs" style="color:var(--accent)">API docs</a></p>
-</header>
 <main>
-  <section class="card">
-    <h2>Connect</h2>
-    <div class="row">
-      <input class="key" id="apiKey" placeholder="bk_live_xxxxxxxx_…" autocomplete="off" spellcheck="false">
-      <button id="connect">Load usage</button>
-    </div>
-    <p style="color:var(--muted);margin:12px 0 6px">No key yet? Create a sandbox customer:</p>
-    <div class="row">
-      <input id="suName" placeholder="Company name" value="Acme Fintech">
-      <input id="suEmail" placeholder="email" value="">
-      <select id="suPlan"><option value="free">free</option><option value="pro">pro</option></select>
-      <button class="secondary" id="signup">Sign up</button>
-    </div>
-    <div id="signupResult" class="notice hidden" style="margin-top:10px"></div>
-    <div id="connectError" class="error"></div>
+  <header>
+    <h1>Rate Limit Lab</h1>
+    <p class="muted">Ledgerline is a pretend bank with a public API. Like a real bank, it can't let anyone send
+      unlimited requests, so it uses <b>four different rate limiting rules</b>, each suited to a different job.
+      Press the buttons below and watch each rule react in real time. All money here is fake.</p>
+  </header>
+
+  <!-- Step 1: key -->
+  <section class="card" id="keyCard">
+    <h2><span class="step">1</span>Get a test API key</h2>
+    <p class="muted">An API key is how the bank knows who's calling. One click creates a test customer with two
+      accounts (Checking $5,000 and Savings $20,000) and a key.</p>
+    <button id="createKey">Create my test key</button>
+    <div id="keyError" class="error"></div>
   </section>
 
-  <div id="app" class="hidden" style="display:grid;gap:16px">
+  <section class="card hidden" id="keyReady">
+    <h2><span class="step">1</span>You're set up</h2>
+    <p class="muted small">Your key is saved in this browser tab. Everything below uses it.</p>
+    <div class="row"><code id="keyShown"></code></div>
+  </section>
+
+  <div id="labs" class="hidden" style="display:grid;gap:20px">
+    <h2 style="margin:8px 0 -4px"><span class="step">2</span>Try each rule</h2>
+
+    <!-- Token bucket -->
     <section class="card">
-      <h2>Today</h2>
-      <div class="stats" id="stats"></div>
+      <h2>Everyday requests<span class="tag">Token bucket</span></h2>
+      <p class="rule">You get a cup of <b>10 tokens</b>. Every request spends one. The cup refills with
+        <b>2 tokens every second</b>. Empty cup = request blocked.</p>
+      <p class="why">Why a bank uses it: a banking app sends a burst of requests when you open it, then goes quiet.
+        This allows the burst but stops anyone hammering the bank non-stop.</p>
+      <div class="meter">
+        <div class="meter-label"><span>Tokens in your cup right now</span><b id="tbText">–</b></div>
+        <div class="slots" id="tbSlots"></div>
+      </div>
+      <button data-lab="tb">Send 15 requests at once</button>
+      <div class="reqs" id="tbReqs"></div>
+      <p class="result" id="tbResult"></p>
     </section>
 
+    <!-- Sliding window -->
     <section class="card">
-      <h2>Rate limit lab</h2>
-      <div class="lab">
-        <div class="test">
-          <h3>Token bucket: API burst</h3>
-          <p>Fires 30 account reads at once. A full bucket lets the first <b id="burstN">burst</b> through, then refills steadily.</p>
-          <div class="dots" id="dTb"></div><div class="result" id="rTb"></div>
-          <button class="secondary" data-test="tb">Run</button>
-        </div>
-        <div class="test">
-          <h3>Sliding window: transfer velocity</h3>
-          <p>Sends 8 transfers from Checking to Savings. Only 5 are allowed in any rolling 60s window per account.</p>
-          <div class="dots" id="dSw"></div><div class="result" id="rSw"></div>
-          <button class="secondary" data-test="sw">Run</button>
-        </div>
-        <div class="test">
-          <h3>Leaky bucket: payroll payouts</h3>
-          <p>Submits a payroll batch of 25 payouts in one call. 20 fit in the queue and are dispatched 1/second; the rest overflow.</p>
-          <div class="dots" id="dLb"></div><div class="result" id="rLb"></div>
-          <button class="secondary" data-test="lb">Run</button>
-        </div>
-        <div class="test">
-          <h3>Idempotency: retried transfer</h3>
-          <p>Sends the same transfer 3 times with one Idempotency-Key. Money moves once; retries are replayed.</p>
-          <div class="dots" id="dId"></div><div class="result" id="rId"></div>
-          <button class="secondary" data-test="id">Run</button>
-        </div>
+      <h2>Money transfers<span class="tag">Sliding window</span></h2>
+      <p class="rule">At most <b>5 transfers out of an account in any 60 seconds</b>. The 60 seconds always means
+        "the last 60 seconds from now", so the limit can't be dodged by timing.</p>
+      <p class="why">Why a bank uses it: if a thief gets into an account, they try to drain it quickly.
+        This caps how fast money can leave.</p>
+      <div class="meter">
+        <div class="meter-label"><span>Transfers from Checking in the last 60 s</span><b id="swText">–</b></div>
+        <div class="slots" id="swSlots"></div>
       </div>
-      <div class="legend">
-        <span><i style="background:var(--ok)"></i>accepted</span>
-        <span><i style="background:var(--warn)"></i>replayed / queued</span>
-        <span><i style="background:var(--bad)"></i>429 rate limited</span>
+      <button data-lab="sw">Make 6 transfers of $1</button>
+      <div class="reqs" id="swReqs"></div>
+      <p class="result" id="swResult"></p>
+    </section>
+
+    <!-- Leaky bucket -->
+    <section class="card">
+      <h2>Payroll payouts<span class="tag">Leaky bucket</span></h2>
+      <p class="rule">Payouts to other banks join a <b>queue of 20</b> that sends out <b>1 payout per second</b>,
+        always at the same steady pace. If the queue is full, new payouts are turned away.</p>
+      <p class="why">Why a bank uses it: the payment network between banks only accepts a steady trickle of
+        payments. A company paying 25 staff at once gets them sent smoothly instead of all at once.</p>
+      <div class="meter">
+        <div class="meter-label"><span>Payouts waiting in the queue</span><b id="lbText">–</b></div>
+        <div class="slots" id="lbSlots"></div>
+      </div>
+      <button data-lab="lb">Pay 25 employees at once</button>
+      <div class="reqs" id="lbReqs"></div>
+      <p class="result" id="lbResult"></p>
+    </section>
+
+    <!-- Fixed window -->
+    <section class="card">
+      <h2>Daily allowance<span class="tag">Fixed window</span></h2>
+      <p class="rule">The free plan includes <b>1,000 requests per day</b>. The count goes back to zero at
+        <b>midnight UTC</b>, so you always know when it resets.</p>
+      <p class="why">Why a bank uses it: it's how API plans are sold and billed ("1,000 calls a day"). Every
+        request you make above counts towards it.</p>
+      <div class="meter">
+        <div class="meter-label"><span>Used today</span><b id="fwText">–</b></div>
+        <div class="bar"><div id="fwBar" style="width:0"></div></div>
+        <div class="meter-label muted"><span id="fwReset"></span></div>
       </div>
     </section>
 
+    <!-- Idempotency -->
     <section class="card">
-      <h2>Calls per day (last 14 days)</h2>
-      <div class="chart" id="chart"></div>
-      <div class="chart-labels" id="chartLabels"></div>
-      <div class="legend">
-        <span><i style="background:var(--bar)"></i>served</span>
-        <span><i style="background:var(--bar-bad)"></i>rate limited</span>
+      <h2>Safe retries<span class="tag">Idempotency key</span></h2>
+      <p class="rule">Each transfer carries a unique ID. If the same transfer is sent again (say the network
+        dropped and the app retried), the bank sees the ID, <b>doesn't move the money again</b>, and replies with
+        the original answer.</p>
+      <p class="why">Why a bank uses it: without it, a retry after a timeout could pay someone twice.</p>
+      <button data-lab="id">Send the same $25 transfer 3 times</button>
+      <div class="reqs" id="idReqs"></div>
+      <p class="result" id="idResult"></p>
+    </section>
+
+    <div class="legend">
+      <span><i style="background:var(--ok)"></i>allowed</span>
+      <span><i style="background:var(--wait)"></i>queued / replayed</span>
+      <span><i style="background:var(--bad)"></i>blocked (HTTP 429 "Too Many Requests")</span>
+    </div>
+
+    <!-- Usage -->
+    <section class="card">
+      <h2><span class="step">3</span>Your usage</h2>
+      <p class="muted small">Every request is recorded, just as a real API platform meters usage for billing.
+        Blocked requests are counted but not charged.</p>
+      <div class="stats">
+        <div class="stat"><div class="v" id="uCalls">–</div><div class="l">requests today</div></div>
+        <div class="stat"><div class="v" id="uBlocked">–</div><div class="l">blocked today</div></div>
+        <div class="stat"><div class="v" id="uBill">–</div><div class="l">bill this month (free plan)</div></div>
       </div>
     </section>
 
-    <section class="card">
-      <h2>This month by endpoint</h2>
-      <div class="table-wrap"><table id="endpoints"></table></div>
-    </section>
-
-    <section class="card">
-      <h2>API keys</h2>
-      <div class="table-wrap"><table id="keys"></table></div>
-      <div class="row" style="margin-top:10px">
-        <input id="newKeyName" placeholder="Key name, e.g. production">
-        <button class="secondary" id="createKey">Create key</button>
+    <details class="card">
+      <summary>For developers</summary>
+      <div style="display:grid;gap:10px">
+        <p class="small">Call the API yourself in the <a href="/docs" target="_blank">interactive docs</a>
+          (click <b>Authorize</b> and paste your key), or read how everything works in the
+          <a href="https://github.com/udaydaroch/rateLimitProject#readme" target="_blank">README</a>.
+          The meters on this page come from <code>GET /v1/limits</code>, which reads each limiter without using it up.</p>
+        <label class="small muted" for="keyInput">Use a different API key</label>
+        <div class="row"><input id="keyInput" placeholder="bk_live_…" autocomplete="off" spellcheck="false" style="flex:1">
+          <button class="ghost" id="useKey">Use key</button></div>
+        <button class="ghost" id="forget">Forget my key</button>
       </div>
-      <div id="newKey" class="notice hidden" style="margin-top:10px"></div>
-    </section>
+    </details>
   </div>
 </main>
 
 <script>
 const $ = (id) => document.getElementById(id);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const money = (c) => "$" + (c / 100).toLocaleString(undefined, { minimumFractionDigits: 2 });
 const store = {
   get() { try { return sessionStorage.getItem("apiKey") || ""; } catch { return ""; } },
-  set(v) { try { sessionStorage.setItem("apiKey", v); } catch {} },
+  set(v) { try { v ? sessionStorage.setItem("apiKey", v) : sessionStorage.removeItem("apiKey"); } catch {} },
 };
-const fmt = (n) => Number(n).toLocaleString();
-const money = (c) => "$" + (c / 100).toLocaleString(undefined, { minimumFractionDigits: 2 });
-const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+let apiKey = "";
+let checkingId = null, savingsId = null;
 
 async function api(path, opts = {}) {
-  const headers = { "X-API-Key": $("apiKey").value.trim(), ...(opts.headers || {}) };
+  const headers = { "X-API-Key": apiKey, ...(opts.headers || {}) };
   if (opts.body) headers["Content-Type"] = "application/json";
   const res = await fetch(path, { ...opts, headers, body: opts.body ? JSON.stringify(opts.body) : undefined });
   let data = null;
@@ -176,77 +238,8 @@ async function api(path, opts = {}) {
   return { res, data };
 }
 
-async function load() {
-  $("connectError").textContent = "";
-  const { res, data } = await api("/v1/usage");
-  if (!res.ok) {
-    $("connectError").textContent = res.status === 401
-      ? "This key isn't recognised, or it was revoked. Sign up below for a new one."
-      : `Error ${res.status}: ${JSON.stringify(data?.detail ?? data)}`;
-    $("app").classList.add("hidden");
-    return;
-  }
-  store.set($("apiKey").value.trim());
-  $("app").classList.remove("hidden");
-  renderUsage(data);
-  loadKeys();
-}
-
-function renderUsage(u) {
-  const t = u.today, pct = Math.min(100, (t.quota_used / t.quota) * 100);
-  const resets = new Date(t.resets_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  $("burstN").textContent = u.limits.api_traffic.burst;
-  $("stats").innerHTML = `
-    <div class="stat"><div class="label">Plan</div><div class="value">${esc(u.plan)}</div>
-      <div class="label">${u.limits.api_traffic.burst} burst · ${u.limits.api_traffic.refill_per_second}/s sustained</div></div>
-    <div class="stat"><div class="label">Daily quota used (fixed window)</div>
-      <div class="value">${fmt(t.quota_used)} <span style="font-size:13px;color:var(--muted)">/ ${fmt(t.quota)}</span></div>
-      <div class="meter"><div style="width:${pct}%"></div></div>
-      <div class="label">resets ${resets} (00:00 UTC)</div></div>
-    <div class="stat"><div class="label">Billable calls (${u.billing.period})</div>
-      <div class="value">${fmt(u.billing.billable_calls)}</div>
-      <div class="label">${fmt(u.billing.overage_calls)} overage</div></div>
-    <div class="stat"><div class="label">Estimated bill</div>
-      <div class="value">${money(u.billing.estimated_cents)}</div>
-      <div class="label">month to date</div></div>`;
-
-  const max = Math.max(1, ...u.daily.map((d) => d.calls));
-  $("chart").innerHTML = u.daily.map((d) => {
-    const ok = d.calls - d.rate_limited;
-    return `<div class="col" title="${d.date}: ${d.calls} calls, ${d.rate_limited} rate limited">
-      <div class="ok" style="height:${(ok / max) * 100}%"></div>
-      <div class="bad" style="height:${(d.rate_limited / max) * 100}%"></div></div>`;
-  }).join("");
-  $("chartLabels").innerHTML = u.daily.map((d) => `<span>${d.date.slice(5)}</span>`).join("");
-
-  $("endpoints").innerHTML = `<tr><th>Endpoint</th><th>Calls</th><th>Rate limited</th></tr>` +
-    (u.by_endpoint.length ? u.by_endpoint.map((e) =>
-      `<tr><td class="mono">${esc(e.endpoint)}</td><td>${fmt(e.calls)}</td><td>${fmt(e.rate_limited)}</td></tr>`).join("")
-      : `<tr><td colspan="3" style="color:var(--muted)">No calls yet this month.</td></tr>`);
-}
-
-async function loadKeys() {
-  const { res, data } = await api("/v1/keys");
-  if (!res.ok) return;
-  const ts = (s) => (s ? new Date(s * 1000).toLocaleString() : "—");
-  $("keys").innerHTML = `<tr><th>Name</th><th>Key</th><th>Created</th><th>Last used</th><th></th></tr>` +
-    data.data.map((k) => `<tr>
-      <td>${esc(k.name)}</td><td class="mono">${esc(k.hint)}</td><td>${ts(k.created_at)}</td>
-      <td>${ts(k.last_used_at)}</td>
-      <td>${k.revoked_at ? '<span style="color:var(--muted)">revoked</span>'
-          : `<button class="secondary" data-revoke="${k.id}">Revoke</button>`}</td></tr>`).join("");
-}
-
-function dots(el, n) { el.innerHTML = ""; return Array.from({ length: n }, () => el.appendChild(document.createElement("span"))); }
-function mark(dot, res) {
-  if (res.status === 429) dot.className = "r";
-  else if (res.headers.get("Idempotent-Replayed")) dot.className = "q";
-}
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-// The token bucket guards every API call. Lab tests for the other algorithms
-// wait out token-bucket 429s so each test shows only its own algorithm.
+// Every request also passes the token bucket. For the other demos, wait out
+// token-bucket blocks so each demo shows only its own rule.
 async function labCall(path, opts) {
   for (;;) {
     const r = await api(path, opts);
@@ -255,115 +248,203 @@ async function labCall(path, opts) {
   }
 }
 
-async function accounts() {
-  const { res, data } = await labCall("/v1/accounts");
-  if (!res.ok) throw new Error(JSON.stringify(data?.detail ?? data));
-  return data.data;
+// ---------- key setup ----------
+
+$("createKey").onclick = async () => {
+  $("createKey").disabled = true;
+  $("keyError").textContent = "";
+  const email = `visitor-${Math.random().toString(36).slice(2, 10)}@example.com`;
+  const res = await fetch("/v1/signup", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: "Lab visitor", email }) });
+  const data = await res.json().catch(() => ({}));
+  $("createKey").disabled = false;
+  if (!res.ok) {
+    $("keyError").textContent = res.status === 429
+      ? `Too many test keys created from your network. Try again in ${Math.ceil((data.detail?.retry_after_seconds || 60) / 60)} min.`
+      : "Something went wrong creating a key. Please try again.";
+    return;
+  }
+  start(data.api_key);
+};
+
+async function start(key) {
+  apiKey = key;
+  const { res, data } = await api("/v1/limits");
+  if (!res.ok) {
+    store.set("");
+    showSetup(res.status === 401 ? "That key isn't valid any more. Create a new one." : "Couldn't reach the bank. Try again.");
+    return;
+  }
+  store.set(key);
+  [checkingId, savingsId] = data.transfer_velocity.map((t) => Number(t.key.split(":")[1]));
+  $("keyShown").textContent = key;
+  $("keyCard").classList.add("hidden");
+  $("keyReady").classList.remove("hidden");
+  $("labs").classList.remove("hidden");
+  renderLimits(data);
+  refreshUsage();
 }
 
-const tests = {
+function showSetup(message) {
+  apiKey = "";
+  $("keyCard").classList.remove("hidden");
+  $("keyReady").classList.add("hidden");
+  $("labs").classList.add("hidden");
+  $("keyError").textContent = message || "";
+}
+
+$("useKey").onclick = () => { const k = $("keyInput").value.trim(); if (k) start(k); };
+$("forget").onclick = () => { store.set(""); showSetup(); };
+
+// ---------- live meters (polls GET /v1/limits, which never uses anything up) ----------
+
+function slots(el, total, filled, cls = "on") {
+  if (el.children.length !== total) el.innerHTML = "<span></span>".repeat(total);
+  [...el.children].forEach((s, i) => { s.className = i < filled ? cls : ""; });
+}
+
+function renderLimits(l) {
+  const tb = l.api_traffic;
+  slots($("tbSlots"), tb.burst, tb.remaining);
+  $("tbText").textContent = `${tb.remaining} of ${tb.burst}`;
+
+  const sw = l.transfer_velocity.find((t) => t.key === `acct:${checkingId}`) || l.transfer_velocity[0];
+  const used = sw.limit - sw.remaining;
+  slots($("swSlots"), sw.limit, used);
+  $("swText").textContent = used >= sw.limit
+    ? `${used} of ${sw.limit} · next one allowed in ${Math.ceil(sw.retry_after_seconds)} s`
+    : `${used} of ${sw.limit}`;
+
+  const lb = l.payout_rail;
+  const queued = lb.queue_capacity - lb.remaining;
+  slots($("lbSlots"), lb.queue_capacity, queued, "wait");
+  $("lbText").textContent = queued ? `${queued} of ${lb.queue_capacity} · empty in ${Math.ceil(lb.reset_after_seconds)} s`
+                                   : `0 of ${lb.queue_capacity}`;
+
+  const fw = l.daily_quota;
+  const usedToday = fw.limit - fw.remaining;
+  $("fwText").textContent = `${usedToday.toLocaleString()} of ${fw.limit.toLocaleString()}`;
+  $("fwBar").style.width = `${Math.min(100, (usedToday / fw.limit) * 100)}%`;
+  const h = Math.floor(fw.reset_after_seconds / 3600), m = Math.floor((fw.reset_after_seconds % 3600) / 60);
+  $("fwReset").textContent = `Resets to 0 in ${h} h ${m} min`;
+}
+
+let polling = false;
+setInterval(async () => {
+  if (!apiKey || polling || document.hidden) return;
+  polling = true;
+  try {
+    const { res, data } = await api("/v1/limits");
+    if (res.ok) renderLimits(data);
+    else if (res.status === 401) showSetup("That key isn't valid any more. Create a new one.");
+  } catch {} finally { polling = false; }
+}, 1000);
+
+async function refreshUsage() {
+  const { res, data } = await api("/v1/usage");
+  if (!res.ok) return;
+  const today = data.daily[data.daily.length - 1];
+  $("uCalls").textContent = today.calls.toLocaleString();
+  $("uBlocked").textContent = today.rate_limited.toLocaleString();
+  $("uBill").textContent = money(data.billing.estimated_cents);
+}
+
+// ---------- demos ----------
+
+function boxes(el, n) {
+  el.innerHTML = "";
+  return Array.from({ length: n }, (_, i) => {
+    const s = document.createElement("span");
+    s.className = "pending"; s.textContent = i + 1;
+    return el.appendChild(s);
+  });
+}
+
+const labs = {
   async tb() {
-    const ds = dots($("dTb"), 30);
-    const results = await Promise.all(ds.map(() => api("/v1/accounts")));
-    results.forEach((r, i) => mark(ds[i], r.res));
-    const limited = results.filter((r) => r.res.status === 429);
-    $("rTb").textContent = `${30 - limited.length} served, ${limited.length} limited` +
-      (limited[0] ? ` · Retry-After ${limited[0].res.headers.get("Retry-After")}s` : "");
+    const bs = boxes($("tbReqs"), 15);
+    const results = await Promise.all(bs.map(async (b) => {
+      const r = await api("/v1/accounts");
+      b.className = r.res.ok ? "ok" : "bad";
+      return r;
+    }));
+    const blocked = results.filter((r) => r.res.status === 429).length;
+    $("tbResult").textContent = blocked
+      ? `${15 - blocked} requests spent the tokens in the cup; the other ${blocked} found it empty and were blocked. ` +
+        "Watch the cup above refill at 2 per second."
+      : "All 15 got through: your cup had enough tokens. Press again quickly to empty it.";
   },
+
   async sw() {
-    const [checking, savings] = await accounts();
-    const ds = dots($("dSw"), 8);
-    let last;
-    for (let i = 0; i < 8; i++) {
-      last = await labCall("/v1/transfers", { method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() },
-        body: { from_account_id: checking.id, to_account_id: savings.id, amount_cents: 100, description: "Lab transfer" } });
-      mark(ds[i], last.res);
+    const bs = boxes($("swReqs"), 6);
+    let allowed = 0, wait = 0;
+    for (const b of bs) {
+      const r = await labCall("/v1/transfers", { method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() },
+        body: { from_account_id: checkingId, to_account_id: savingsId, amount_cents: 100, description: "Lab transfer" } });
+      if (r.res.ok) { b.className = "ok"; allowed++; }
+      else { b.className = "bad"; wait = Math.ceil(r.data?.detail?.retry_after_seconds || 0); }
     }
-    const limited = ds.filter((d) => d.className === "r").length;
-    $("rSw").textContent = `${8 - limited} completed, ${limited} blocked` +
-      (limited ? ` · window frees up in ${last.res.headers.get("Retry-After")}s` : "");
+    $("swResult").textContent = allowed === 6 ? "All 6 went through." : allowed
+      ? `${allowed} transfers went through, then the limit of 5 per 60 s kicked in and blocked the rest. ` +
+        `The next slot frees up in ${wait} s, when the oldest transfer is more than 60 s old.`
+      : `All blocked: your earlier transfers are still inside the last 60 seconds. Try again in ${wait} s.`;
   },
+
   async lb() {
-    const [checking] = await accounts();
-    const ds = dots($("dLb"), 25);
-    const payouts = ds.map((_, i) => ({ amount_cents: 100, beneficiary: `Employee ${i + 1}` }));
+    const bs = boxes($("lbReqs"), 25);
+    const payouts = bs.map((_, i) => ({ amount_cents: 100, beneficiary: `Employee ${i + 1}` }));
     const { res, data } = await labCall("/v1/payouts/batch", { method: "POST",
-      headers: { "Idempotency-Key": crypto.randomUUID() },
-      body: { from_account_id: checking.id, payouts } });
-    if (!res.ok) { $("rLb").textContent = `Error ${res.status}`; return; }
+      headers: { "Idempotency-Key": crypto.randomUUID() }, body: { from_account_id: checkingId, payouts } });
+    if (!res.ok) { $("lbResult").textContent = "Couldn't submit the payroll. Try again."; return; }
     data.payouts.forEach((p, i) => {
-      ds[i].className = p.status === "rejected" ? "r" : p.queue_delay_seconds > 0 ? "q" : "";
+      bs[i].className = p.status === "rejected" ? "bad" : p.queue_delay_seconds > 0 ? "wait" : "ok";
+      bs[i].title = p.status === "rejected" ? "Queue full" : `Leaves in ${p.queue_delay_seconds.toFixed(0)} s`;
     });
-    const maxDelay = Math.max(0, ...data.payouts.map((p) => p.queue_delay_seconds || 0));
-    $("rLb").textContent = `${data.accepted} queued (last leaves in ${maxDelay.toFixed(1)}s), ${data.rejected} rejected`;
+    const last = Math.round(Math.max(0, ...data.payouts.map((p) => p.queue_delay_seconds || 0)));
+    $("lbResult").textContent = data.rejected
+      ? `${data.accepted} payouts joined the queue and leave one per second (the last one in ${last} s). ` +
+        `The queue only holds 20, so ${data.rejected} were turned away. Watch the queue above drain.`
+      : `All ${data.accepted} payouts joined the queue. They leave one per second. Watch the queue above drain.`;
   },
+
   async id() {
-    const [checking, savings] = await accounts();
-    const before = checking.balance_cents;
+    // From Savings, so this demo isn't blocked by the Checking transfer limit above.
+    const balance = async () => (await labCall(`/v1/accounts/${savingsId}/balance`)).data.balance_cents;
+    const before = await balance();
     const key = crypto.randomUUID();
-    const ds = dots($("dId"), 3);
-    for (let i = 0; i < 3; i++) {
+    const bs = boxes($("idReqs"), 3);
+    let status = 0;
+    for (const b of bs) {
       const r = await labCall("/v1/transfers", { method: "POST", headers: { "Idempotency-Key": key },
-        body: { from_account_id: checking.id, to_account_id: savings.id, amount_cents: 2500, description: "Rent share" } });
-      mark(ds[i], r.res);
+        body: { from_account_id: savingsId, to_account_id: checkingId, amount_cents: 2500, description: "Rent share" } });
+      status = r.res.status;
+      const replayed = r.res.headers.get("Idempotent-Replayed");
+      b.className = replayed ? "wait" : r.res.ok ? "ok" : "bad";
+      if (replayed) b.textContent = "copy";
     }
-    const [after] = await accounts();
-    $("rId").textContent = `3 requests, balance changed by ${money(before - after.balance_cents)} (once)`;
+    if (status === 429) {
+      $("idResult").textContent = "Blocked by the transfer limit (5 per 60 s from Savings). Wait a minute and try again.";
+      return;
+    }
+    const after = await balance();
+    $("idResult").textContent = `The same transfer was sent 3 times, but Savings went down by only ` +
+      `${money(before - after)} (from ${money(before)} to ${money(after)}). Requests 2 and 3 got a copy of the first answer.`;
   },
 };
 
 document.addEventListener("click", async (e) => {
-  const t = e.target.closest("[data-test]");
-  if (t) {
-    t.disabled = true;
-    try { await tests[t.dataset.test](); }
-    catch (err) { t.previousElementSibling.textContent = `Error: ${err.message}`; }
-    finally { t.disabled = false; load(); }
-    return;
-  }
-  const rv = e.target.closest("[data-revoke]");
-  if (rv && confirm("Revoke this key? Requests using it will fail immediately.")) {
-    await api(`/v1/keys/${rv.dataset.revoke}`, { method: "DELETE" });
-    loadKeys();
-  }
+  const btn = e.target.closest("[data-lab]");
+  if (!btn || !apiKey) return;
+  btn.disabled = true;
+  const result = btn.parentElement.querySelector(".result");
+  result.textContent = "";
+  try { await labs[btn.dataset.lab](); }
+  catch { result.textContent = "Something went wrong. Please try again."; }
+  finally { btn.disabled = false; refreshUsage(); }
 });
 
-$("connect").onclick = load;
-$("apiKey").addEventListener("keydown", (e) => { if (e.key === "Enter") load(); });
-
-$("signup").onclick = async () => {
-  const res = await fetch("/v1/signup", { method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name: $("suName").value, email: $("suEmail").value, plan: $("suPlan").value }) });
-  const data = await res.json();
-  const box = $("signupResult");
-  box.classList.remove("hidden");
-  if (!res.ok) {
-    const d = data.detail || {};
-    const msg = d.error === "email_taken" ? "That email already has an account. Use a different email."
-      : res.status === 429 ? `Too many signups from your network. Try again in ${Math.ceil((d.retry_after_seconds || 60) / 60)} min.`
-      : JSON.stringify(d);
-    box.innerHTML = `<span class="error">${esc(msg)}</span>`;
-    return;
-  }
-  box.innerHTML = `Your API key (shown once): <code>${esc(data.api_key)}</code>`;
-  $("suEmail").value = randomEmail();  // a second click shouldn't reuse the same email
-  $("apiKey").value = data.api_key;
-  load();
-};
-
-$("createKey").onclick = async () => {
-  const { res, data } = await api("/v1/keys", { method: "POST", body: { name: $("newKeyName").value || "unnamed" } });
-  const box = $("newKey");
-  box.classList.remove("hidden");
-  box.innerHTML = res.ok ? `New key (shown once): <code>${esc(data.api_key)}</code>`
-                         : `<span class="error">${esc(JSON.stringify(data.detail))}</span>`;
-  loadKeys();
-};
-
-function randomEmail() { return `dev+${Math.random().toString(36).slice(2, 7)}@example.com`; }
-$("suEmail").value = randomEmail();
-$("apiKey").value = store.get();
-if ($("apiKey").value) load();
+const saved = store.get();
+if (saved) start(saved);
 </script>
 </body>
 </html>
