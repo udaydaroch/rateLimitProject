@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ledgerline Developer Dashboard</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --text: #16191f; --muted: #5d6573; --border: #e1e4ea;
+    --accent: #1f5eff; --ok: #138a52; --warn: #b26b00; --bad: #c62828; --bar: #1f5eff; --bar-bad: #e05252;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1216; --card: #171b21; --text: #e8eaee; --muted: #9aa3b2; --border: #2a303a;
+      --accent: #6c95ff; --ok: #43c486; --warn: #e3a33b; --bad: #ff6b6b; --bar: #6c95ff; --bar-bad: #ff6b6b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  header { padding: 20px 16px; border-bottom: 1px solid var(--border); background: var(--card); }
+  header h1 { margin: 0; font-size: 18px; }
+  header p { margin: 2px 0 0; color: var(--muted); }
+  main { max-width: 1100px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .card h2 { margin: 0 0 12px; font-size: 15px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  input, select { font: inherit; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px;
+                  background: var(--bg); color: var(--text); min-width: 0; }
+  input.key { flex: 1 1 320px; font-family: ui-monospace, Menlo, monospace; }
+  button { font: inherit; padding: 8px 14px; border-radius: 6px; border: 1px solid var(--accent);
+           background: var(--accent); color: #fff; cursor: pointer; }
+  button.secondary { background: transparent; color: var(--accent); }
+  button:disabled { opacity: .5; cursor: default; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+  .stat { border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+  .stat .label { color: var(--muted); font-size: 12px; }
+  .stat .value { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .meter { height: 6px; background: var(--border); border-radius: 3px; margin-top: 8px; overflow: hidden; }
+  .meter > div { height: 100%; background: var(--accent); }
+  .chart { display: flex; align-items: flex-end; gap: 4px; height: 140px; padding-top: 8px; }
+  .chart .col { flex: 1; display: flex; flex-direction: column-reverse; min-width: 0; height: 100%; }
+  .chart .ok { background: var(--bar); border-radius: 2px 2px 0 0; }
+  .chart .bad { background: var(--bar-bad); }
+  .chart-labels { display: flex; gap: 4px; font-size: 10px; color: var(--muted); }
+  .chart-labels span { flex: 1; text-align: center; min-width: 0; overflow: hidden; }
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; }
+  .table-wrap { overflow-x: auto; }
+  code, .mono { font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+  .lab { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+  .lab .test { border: 1px solid var(--border); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+  .lab .test h3 { margin: 0; font-size: 14px; }
+  .lab .test p { margin: 0; color: var(--muted); font-size: 12px; flex: 1; }
+  .dots { display: flex; flex-wrap: wrap; gap: 3px; min-height: 12px; }
+  .dots span { width: 10px; height: 10px; border-radius: 2px; background: var(--ok); }
+  .dots span.r { background: var(--bad); }
+  .dots span.q { background: var(--warn); }
+  .result { font-size: 12px; color: var(--muted); min-height: 18px; }
+  .notice { padding: 10px 12px; border-radius: 6px; background: var(--bg); border: 1px dashed var(--border);
+            word-break: break-all; }
+  .hidden { display: none !important; }
+  .error { color: var(--bad); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Ledgerline Developer Dashboard</h1>
+  <p>API keys, rate limits and metered usage for the Ledgerline banking API. · <a href="/docs" style="color:var(--accent)">API docs</a></p>
+</header>
+<main>
+  <section class="card">
+    <h2>Connect</h2>
+    <div class="row">
+      <input class="key" id="apiKey" placeholder="bk_live_xxxxxxxx_…" autocomplete="off" spellcheck="false">
+      <button id="connect">Load usage</button>
+    </div>
+    <p style="color:var(--muted);margin:12px 0 6px">No key yet? Create a sandbox customer:</p>
+    <div class="row">
+      <input id="suName" placeholder="Company name" value="Acme Fintech">
+      <input id="suEmail" placeholder="email" value="">
+      <select id="suPlan"><option value="free">free</option><option value="pro">pro</option></select>
+      <button class="secondary" id="signup">Sign up</button>
+    </div>
+    <div id="signupResult" class="notice hidden" style="margin-top:10px"></div>
+    <div id="connectError" class="error"></div>
+  </section>
+
+  <div id="app" class="hidden" style="display:grid;gap:16px">
+    <section class="card">
+      <h2>Today</h2>
+      <div class="stats" id="stats"></div>
+    </section>
+
+    <section class="card">
+      <h2>Rate limit lab</h2>
+      <div class="lab">
+        <div class="test">
+          <h3>Token bucket: API burst</h3>
+          <p>Fires 30 account reads at once. A full bucket lets the first <b id="burstN">burst</b> through, then refills steadily.</p>
+          <div class="dots" id="dTb"></div><div class="result" id="rTb"></div>
+          <button class="secondary" data-test="tb">Run</button>
+        </div>
+        <div class="test">
+          <h3>Sliding window: transfer velocity</h3>
+          <p>Sends 8 transfers from Checking to Savings. Only 5 are allowed in any rolling 60s window per account.</p>
+          <div class="dots" id="dSw"></div><div class="result" id="rSw"></div>
+          <button class="secondary" data-test="sw">Run</button>
+        </div>
+        <div class="test">
+          <h3>Leaky bucket: payroll payouts</h3>
+          <p>Submits a payroll batch of 25 payouts in one call. 20 fit in the queue and are dispatched 1/second; the rest overflow.</p>
+          <div class="dots" id="dLb"></div><div class="result" id="rLb"></div>
+          <button class="secondary" data-test="lb">Run</button>
+        </div>
+        <div class="test">
+          <h3>Idempotency: retried transfer</h3>
+          <p>Sends the same transfer 3 times with one Idempotency-Key. Money moves once; retries are replayed.</p>
+          <div class="dots" id="dId"></div><div class="result" id="rId"></div>
+          <button class="secondary" data-test="id">Run</button>
+        </div>
+      </div>
+      <div class="legend">
+        <span><i style="background:var(--ok)"></i>accepted</span>
+        <span><i style="background:var(--warn)"></i>replayed / queued</span>
+        <span><i style="background:var(--bad)"></i>429 rate limited</span>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Calls per day (last 14 days)</h2>
+      <div class="chart" id="chart"></div>
+      <div class="chart-labels" id="chartLabels"></div>
+      <div class="legend">
+        <span><i style="background:var(--bar)"></i>served</span>
+        <span><i style="background:var(--bar-bad)"></i>rate limited</span>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>This month by endpoint</h2>
+      <div class="table-wrap"><table id="endpoints"></table></div>
+    </section>
+
+    <section class="card">
+      <h2>API keys</h2>
+      <div class="table-wrap"><table id="keys"></table></div>
+      <div class="row" style="margin-top:10px">
+        <input id="newKeyName" placeholder="Key name, e.g. production">
+        <button class="secondary" id="createKey">Create key</button>
+      </div>
+      <div id="newKey" class="notice hidden" style="margin-top:10px"></div>
+    </section>
+  </div>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const store = {
+  get() { try { return sessionStorage.getItem("apiKey") || ""; } catch { return ""; } },
+  set(v) { try { sessionStorage.setItem("apiKey", v); } catch {} },
+};
+const fmt = (n) => Number(n).toLocaleString();
+const money = (c) => "$" + (c / 100).toLocaleString(undefined, { minimumFractionDigits: 2 });
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+async function api(path, opts = {}) {
+  const headers = { "X-API-Key": $("apiKey").value.trim(), ...(opts.headers || {}) };
+  if (opts.body) headers["Content-Type"] = "application/json";
+  const res = await fetch(path, { ...opts, headers, body: opts.body ? JSON.stringify(opts.body) : undefined });
+  let data = null;
+  try { data = await res.json(); } catch {}
+  return { res, data };
+}
+
+async function load() {
+  $("connectError").textContent = "";
+  const { res, data } = await api("/v1/usage");
+  if (!res.ok) {
+    $("connectError").textContent = res.status === 401
+      ? "This key isn't recognised. The live sandbox resets when its server instance recycles, so sign up again below."
+      : `Error ${res.status}: ${JSON.stringify(data?.detail ?? data)}`;
+    $("app").classList.add("hidden");
+    return;
+  }
+  store.set($("apiKey").value.trim());
+  $("app").classList.remove("hidden");
+  renderUsage(data);
+  loadKeys();
+}
+
+function renderUsage(u) {
+  const t = u.today, pct = Math.min(100, (t.quota_used / t.quota) * 100);
+  const resets = new Date(t.resets_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  $("burstN").textContent = u.limits.api_traffic.burst;
+  $("stats").innerHTML = `
+    <div class="stat"><div class="label">Plan</div><div class="value">${esc(u.plan)}</div>
+      <div class="label">${u.limits.api_traffic.burst} burst · ${u.limits.api_traffic.refill_per_second}/s sustained</div></div>
+    <div class="stat"><div class="label">Daily quota used (fixed window)</div>
+      <div class="value">${fmt(t.quota_used)} <span style="font-size:13px;color:var(--muted)">/ ${fmt(t.quota)}</span></div>
+      <div class="meter"><div style="width:${pct}%"></div></div>
+      <div class="label">resets ${resets} (00:00 UTC)</div></div>
+    <div class="stat"><div class="label">Billable calls (${u.billing.period})</div>
+      <div class="value">${fmt(u.billing.billable_calls)}</div>
+      <div class="label">${fmt(u.billing.overage_calls)} overage</div></div>
+    <div class="stat"><div class="label">Estimated bill</div>
+      <div class="value">${money(u.billing.estimated_cents)}</div>
+      <div class="label">month to date</div></div>`;
+
+  const max = Math.max(1, ...u.daily.map((d) => d.calls));
+  $("chart").innerHTML = u.daily.map((d) => {
+    const ok = d.calls - d.rate_limited;
+    return `<div class="col" title="${d.date}: ${d.calls} calls, ${d.rate_limited} rate limited">
+      <div class="ok" style="height:${(ok / max) * 100}%"></div>
+      <div class="bad" style="height:${(d.rate_limited / max) * 100}%"></div></div>`;
+  }).join("");
+  $("chartLabels").innerHTML = u.daily.map((d) => `<span>${d.date.slice(5)}</span>`).join("");
+
+  $("endpoints").innerHTML = `<tr><th>Endpoint</th><th>Calls</th><th>Rate limited</th></tr>` +
+    (u.by_endpoint.length ? u.by_endpoint.map((e) =>
+      `<tr><td class="mono">${esc(e.endpoint)}</td><td>${fmt(e.calls)}</td><td>${fmt(e.rate_limited)}</td></tr>`).join("")
+      : `<tr><td colspan="3" style="color:var(--muted)">No calls yet this month.</td></tr>`);
+}
+
+async function loadKeys() {
+  const { res, data } = await api("/v1/keys");
+  if (!res.ok) return;
+  const ts = (s) => (s ? new Date(s * 1000).toLocaleString() : "—");
+  $("keys").innerHTML = `<tr><th>Name</th><th>Key</th><th>Created</th><th>Last used</th><th></th></tr>` +
+    data.data.map((k) => `<tr>
+      <td>${esc(k.name)}</td><td class="mono">${esc(k.hint)}</td><td>${ts(k.created_at)}</td>
+      <td>${ts(k.last_used_at)}</td>
+      <td>${k.revoked_at ? '<span style="color:var(--muted)">revoked</span>'
+          : `<button class="secondary" data-revoke="${k.id}">Revoke</button>`}</td></tr>`).join("");
+}
+
+function dots(el, n) { el.innerHTML = ""; return Array.from({ length: n }, () => el.appendChild(document.createElement("span"))); }
+function mark(dot, res) {
+  if (res.status === 429) dot.className = "r";
+  else if (res.headers.get("Idempotent-Replayed")) dot.className = "q";
+}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// The token bucket guards every API call. Lab tests for the other algorithms
+// wait out token-bucket 429s so each test shows only its own algorithm.
+async function labCall(path, opts) {
+  for (;;) {
+    const r = await api(path, opts);
+    if (r.res.status !== 429 || r.data?.detail?.policy !== "token_bucket") return r;
+    await sleep(Number(r.res.headers.get("Retry-After") || 1) * 1000);
+  }
+}
+
+async function accounts() {
+  const { res, data } = await labCall("/v1/accounts");
+  if (!res.ok) throw new Error(JSON.stringify(data?.detail ?? data));
+  return data.data;
+}
+
+const tests = {
+  async tb() {
+    const ds = dots($("dTb"), 30);
+    const results = await Promise.all(ds.map(() => api("/v1/accounts")));
+    results.forEach((r, i) => mark(ds[i], r.res));
+    const limited = results.filter((r) => r.res.status === 429);
+    $("rTb").textContent = `${30 - limited.length} served, ${limited.length} limited` +
+      (limited[0] ? ` · Retry-After ${limited[0].res.headers.get("Retry-After")}s` : "");
+  },
+  async sw() {
+    const [checking, savings] = await accounts();
+    const ds = dots($("dSw"), 8);
+    let last;
+    for (let i = 0; i < 8; i++) {
+      last = await labCall("/v1/transfers", { method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() },
+        body: { from_account_id: checking.id, to_account_id: savings.id, amount_cents: 100, description: "Lab transfer" } });
+      mark(ds[i], last.res);
+    }
+    const limited = ds.filter((d) => d.className === "r").length;
+    $("rSw").textContent = `${8 - limited} completed, ${limited} blocked` +
+      (limited ? ` · window frees up in ${last.res.headers.get("Retry-After")}s` : "");
+  },
+  async lb() {
+    const [checking] = await accounts();
+    const ds = dots($("dLb"), 25);
+    const payouts = ds.map((_, i) => ({ amount_cents: 100, beneficiary: `Employee ${i + 1}` }));
+    const { res, data } = await labCall("/v1/payouts/batch", { method: "POST",
+      headers: { "Idempotency-Key": crypto.randomUUID() },
+      body: { from_account_id: checking.id, payouts } });
+    if (!res.ok) { $("rLb").textContent = `Error ${res.status}`; return; }
+    data.payouts.forEach((p, i) => {
+      ds[i].className = p.status === "rejected" ? "r" : p.queue_delay_seconds > 0 ? "q" : "";
+    });
+    const maxDelay = Math.max(0, ...data.payouts.map((p) => p.queue_delay_seconds || 0));
+    $("rLb").textContent = `${data.accepted} queued (last leaves in ${maxDelay.toFixed(1)}s), ${data.rejected} rejected`;
+  },
+  async id() {
+    const [checking, savings] = await accounts();
+    const before = checking.balance_cents;
+    const key = crypto.randomUUID();
+    const ds = dots($("dId"), 3);
+    for (let i = 0; i < 3; i++) {
+      const r = await labCall("/v1/transfers", { method: "POST", headers: { "Idempotency-Key": key },
+        body: { from_account_id: checking.id, to_account_id: savings.id, amount_cents: 2500, description: "Rent share" } });
+      mark(ds[i], r.res);
+    }
+    const [after] = await accounts();
+    $("rId").textContent = `3 requests, balance changed by ${money(before - after.balance_cents)} (once)`;
+  },
+};
+
+document.addEventListener("click", async (e) => {
+  const t = e.target.closest("[data-test]");
+  if (t) {
+    t.disabled = true;
+    try { await tests[t.dataset.test](); }
+    catch (err) { t.previousElementSibling.textContent = `Error: ${err.message}`; }
+    finally { t.disabled = false; load(); }
+    return;
+  }
+  const rv = e.target.closest("[data-revoke]");
+  if (rv && confirm("Revoke this key? Requests using it will fail immediately.")) {
+    await api(`/v1/keys/${rv.dataset.revoke}`, { method: "DELETE" });
+    loadKeys();
+  }
+});
+
+$("connect").onclick = load;
+$("apiKey").addEventListener("keydown", (e) => { if (e.key === "Enter") load(); });
+
+$("signup").onclick = async () => {
+  const res = await fetch("/v1/signup", { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: $("suName").value, email: $("suEmail").value, plan: $("suPlan").value }) });
+  const data = await res.json();
+  const box = $("signupResult");
+  box.classList.remove("hidden");
+  if (!res.ok) { box.innerHTML = `<span class="error">${esc(JSON.stringify(data.detail))}</span>`; return; }
+  box.innerHTML = `Your API key (shown once): <code>${esc(data.api_key)}</code>`;
+  $("apiKey").value = data.api_key;
+  load();
+};
+
+$("createKey").onclick = async () => {
+  const { res, data } = await api("/v1/keys", { method: "POST", body: { name: $("newKeyName").value || "unnamed" } });
+  const box = $("newKey");
+  box.classList.remove("hidden");
+  box.innerHTML = res.ok ? `New key (shown once): <code>${esc(data.api_key)}</code>`
+                         : `<span class="error">${esc(JSON.stringify(data.detail))}</span>`;
+  loadKeys();
+};
+
+$("suEmail").value = `dev+${Math.random().toString(36).slice(2, 7)}@example.com`;
+$("apiKey").value = store.get();
+if ($("apiKey").value) load();
+</script>
+</body>
+</html>
